@@ -30,7 +30,6 @@ export function OverlayPanel() {
   const {
     selectedOverlayId,
     picCount, updatePicCount,
-    logoBadge, updateLogoBadge,
     mascot, updateMascot,
   } = useOverlayStore();
   const mascotInputRef = useRef<HTMLInputElement>(null);
@@ -40,7 +39,7 @@ export function OverlayPanel() {
   return (
     <div className="border-t border-surface-border bg-surface-raised px-4 py-3 flex flex-wrap gap-x-6 gap-y-3 items-center">
       <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest shrink-0">
-        {selectedOverlayId === 'picCount' ? 'Pic Count' : selectedOverlayId === 'logoBadge' ? 'Logo Badge' : 'Mascot'}
+        {selectedOverlayId === 'picCount' ? 'Pic Count' : 'Mascot'}
       </span>
 
       {/* PicCount — just the number + style */}
@@ -64,33 +63,19 @@ export function OverlayPanel() {
             <input type="checkbox" checked={picCount.shadowEnabled} onChange={(e) => updatePicCount({ shadowEnabled: e.target.checked })} />
             Shadow
           </label>
-        </>
-      )}
-
-      {/* LogoBadge */}
-      {selectedOverlayId === 'logoBadge' && (
-        <>
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-400">Text</label>
-            <input
-              className="w-36 bg-surface border border-surface-border rounded px-2 py-0.5 text-xs text-gray-200 focus:outline-none focus:border-accent"
-              value={logoBadge.text}
-              onChange={(e) => updateLogoBadge({ text: e.target.value })}
-            />
-          </div>
-          <Slider label="Font size" min={14} max={72} value={logoBadge.fontSize} onChange={(v) => updateLogoBadge({ fontSize: v })} />
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-gray-400">Text</label>
-              <ColorInput value={logoBadge.textColor} onChange={(v) => updateLogoBadge({ textColor: v })} />
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-gray-400">Badge</label>
-              <ColorInput value={logoBadge.bgColor} onChange={(v) => updateLogoBadge({ bgColor: v })} />
-            </div>
-          </div>
-          <Slider label="Opacity" min={0} max={100} value={Math.round(logoBadge.bgOpacity * 100)} onChange={(v) => updateLogoBadge({ bgOpacity: v / 100 })} unit="%" />
-          <Slider label="Radius" min={0} max={40} value={logoBadge.borderRadius} onChange={(v) => updateLogoBadge({ borderRadius: v })} />
+          <label className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer">
+            <input type="checkbox" checked={picCount.strokeEnabled} onChange={(e) => updatePicCount({ strokeEnabled: e.target.checked })} />
+            Stroke
+          </label>
+          {picCount.strokeEnabled && (
+            <>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-400">Stroke Color</label>
+                <ColorInput value={picCount.strokeColor} onChange={(v) => updatePicCount({ strokeColor: v })} />
+              </div>
+              <Slider label="Stroke W" min={1} max={20} value={picCount.strokeWidth} onChange={(v) => updatePicCount({ strokeWidth: v })} />
+            </>
+          )}
         </>
       )}
 
@@ -128,8 +113,7 @@ export function OverlayPanel() {
               </div>
             </>
           )}
-          <Slider label="Width" min={40} max={400} value={mascot.width} onChange={(v) => updateMascot({ width: v })} />
-          <Slider label="Height" min={40} max={400} value={mascot.height} onChange={(v) => updateMascot({ height: v })} />
+          <span className="text-xs text-gray-500">Scroll wheel over mascot to resize proportionally</span>
         </>
       )}
     </div>

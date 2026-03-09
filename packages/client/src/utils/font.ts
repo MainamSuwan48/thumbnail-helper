@@ -5,10 +5,15 @@ export const OVERLAY_FONT = `'${FONT_FAMILY}', ${FALLBACK}`;
 
 export async function preloadFont() {
   try {
-    const face = new FontFace(FONT_FAMILY, "url('/fonts/FOT-YurukaStd.otf'), url('/fonts/FOT-YurukaStd.ttf')");
-    const loaded = await face.load();
-    document.fonts.add(loaded);
+    // Register for ALL weights — canvas text matching requires the exact weight
+    const faces = [
+      new FontFace(FONT_FAMILY, "url('/fot-yuruka-std.ttf')", { weight: 'normal' }),
+      new FontFace(FONT_FAMILY, "url('/fot-yuruka-std.ttf')", { weight: 'bold' }),
+    ];
+    const loaded = await Promise.all(faces.map((f) => f.load()));
+    loaded.forEach((f) => document.fonts.add(f));
   } catch {
-    // Font file not placed yet — fallback will be used silently
+    // Font not available — fallback used silently
   }
+  await document.fonts.ready;
 }

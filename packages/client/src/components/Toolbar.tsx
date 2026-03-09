@@ -157,7 +157,7 @@ export function Toolbar({ canvasRef }: { canvasRef: React.RefObject<BannerCanvas
       <div className="flex items-center gap-2">
         <span className="text-xs text-gray-400">Overlay</span>
         <div className="flex gap-1">
-          {([ ['picCount','#'], ['logoBadge','B'], ['mascot','M'] ] as [OverlayId, string][]).map(([id, icon]) => (
+          {([ ['picCount','#'], ['mascot','M'] ] as [OverlayId, string][]).map(([id, icon]) => (
             <button
               key={id}
               onClick={() => useOverlayStore.getState().setSelectedOverlay(
