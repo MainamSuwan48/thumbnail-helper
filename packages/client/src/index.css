@@ -34,3 +34,14 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #555; }
+
+/* Mascot mode indicator — blinking purple border */
+.mascot-mode-border {
+  outline: 2px solid #a855f7;
+  outline-offset: 2px;
+  animation: mascot-pulse 1.2s ease-in-out infinite;
+}
+@keyframes mascot-pulse {
+  0%, 100% { outline-color: rgba(168, 85, 247, 0.3); box-shadow: 0 0 8px rgba(168, 85, 247, 0.1); }
+  50% { outline-color: rgba(168, 85, 247, 1); box-shadow: 0 0 16px rgba(168, 85, 247, 0.4); }
+}

@@ -38,14 +38,25 @@ export function Toolbar({ canvasRef }: { canvasRef: React.RefObject<BannerCanvas
     try {
       const dataUrl = await canvasRef.current?.exportBanner();
       if (!dataUrl) throw new Error('Export failed: no canvas');
-      const res = await fetch('/api/export/banner', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dataUrl }),
-      });
-      const data = await res.json() as { path?: string; error?: string };
-      if (!res.ok) throw new Error(data.error);
-      setExportMsg(`Saved to ${data.path}`);
+
+      // Try server-side save first, fall back to browser download
+      try {
+        const res = await fetch('/api/export/banner', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dataUrl }),
+        });
+        const data = await res.json() as { path?: string; error?: string };
+        if (!res.ok) throw new Error(data.error);
+        setExportMsg(`Saved to ${data.path}`);
+      } catch {
+        // Server unavailable — download via browser
+        const link = document.createElement('a');
+        link.download = `banner-${Date.now()}.png`;
+        link.href = dataUrl;
+        link.click();
+        setExportMsg('Downloaded!');
+      }
     } catch (e) {
       setExportMsg(e instanceof Error ? e.message : 'Export failed');
     } finally {
@@ -157,12 +168,15 @@ export function Toolbar({ canvasRef }: { canvasRef: React.RefObject<BannerCanvas
       <div className="flex items-center gap-2">
         <span className="text-xs text-gray-400">Overlay</span>
         <div className="flex gap-1">
-          {([ ['picCount','#'], ['mascot','M'] ] as [OverlayId, string][]).map(([id, icon]) => (
+          {([ ['picCount','#'], ['mascot','M'], ['logo','L'] ] as [OverlayId, string][]).map(([id, icon]) => (
             <button
               key={id}
-              onClick={() => useOverlayStore.getState().setSelectedOverlay(
-                useOverlayStore.getState().selectedOverlayId === id ? null : id
-              )}
+              onClick={() => {
+                const o = useOverlayStore.getState();
+                const newId = o.selectedOverlayId === id ? null : id;
+                o.setSelectedOverlay(newId);
+                if (newId) useBannerStore.getState().setSelectedColumn(null);
+              }}
               title={id}
               className="w-7 h-6 rounded text-xs bg-surface-overlay text-gray-300 hover:bg-surface-border hover:text-gray-100 transition-colors"
             >

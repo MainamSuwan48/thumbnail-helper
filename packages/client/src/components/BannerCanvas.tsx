@@ -19,6 +19,7 @@ import {
 import Konva from "konva";
 import useImage from "use-image";
 import { useBannerStore } from "../store/bannerStore";
+import { useOverlayStore } from "../store/overlayStore";
 import type { ColumnState } from "../types";
 import { OverlayLayer } from "./overlay/OverlayLayer";
 
@@ -124,12 +125,17 @@ function ColumnImageLayer({
   const [img] = useImage(column.image?.url ?? "", "anonymous");
   const originalRef = useRef<Konva.Image>(null);
   const brushMode = useBannerStore((s) => s.brushMode);
+  const isMascotMode = useOverlayStore((s) => s.selectedOverlayId) === "mascot";
+  const updateImagePosition = useBannerStore((s) => s.updateImagePosition);
+  const updateImageScale = useBannerStore((s) => s.updateImageScale);
 
-  // Cover-fit: compute x/y/scale on first load
+  // Cover-fit: compute x/y/scale on first load, then persist to store
   let x = column.image?.x ?? 0;
   let y = column.image?.y ?? 0;
   let scale = column.image?.scale ?? 1;
-  if (img && column.image && x === 0 && y === 0 && scale === 1) {
+  const needsCoverFit =
+    img && column.image && x === 0 && y === 0 && scale === 1;
+  if (needsCoverFit) {
     const imgAspect = img.width / img.height;
     const colAspect = colW / colH;
     scale = imgAspect > colAspect ? colH / img.height : colW / img.width;
@@ -140,6 +146,14 @@ function ColumnImageLayer({
   useEffect(() => {
     if (img) onImageLoad(img as unknown as HTMLImageElement);
   }, [img]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist computed cover-fit values so scroll-resize works from correct baseline
+  useEffect(() => {
+    if (needsCoverFit && column.image) {
+      updateImagePosition(column.id, x, y);
+      updateImageScale(column.id, scale);
+    }
+  }, [needsCoverFit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Column-wide Konva filter (from FilterPanel)
   useEffect(() => {
@@ -174,8 +188,13 @@ function ColumnImageLayer({
         y={y}
         scaleX={scale}
         scaleY={scale}
+        draggable={!brushMode && !isMascotMode}
         onClick={onClick}
+        onDragEnd={(e) => {
+          updateImagePosition(column.id, e.target.x(), e.target.y());
+        }}
         onWheel={(e) => {
+          if (brushMode) return; // let stage handle brush size
           e.evt.preventDefault();
           onWheel(e.evt.deltaY, scale);
         }}
@@ -196,11 +215,8 @@ function ColumnImageLayer({
   );
 }
 
-// ── "Images" decorative letter overlay ───────────────────────────────────────
-// Each letter is an independent span with hardcoded playful tilt.
-// Positioned bottom-right of the pic-count number (default anchor: canvas x≈30, y≈320, h=72).
-
-const IMAGES_LETTERS: {
+// ── "Images" decorative letter data (rendered as Konva Text in OverlayLayer) ─
+export const IMAGES_LETTERS: {
   char: string;
   rotate: number;
   tx: number;
@@ -213,47 +229,6 @@ const IMAGES_LETTERS: {
   { char: "e", rotate: -4, tx: 0, ty: -4 },
   { char: "s", rotate: 7, tx: 1, ty: 3 },
 ];
-
-function ImagesLetters({ scale }: { scale: number }) {
-  // Anchor: bottom-right of picCount default position (x=28, y=555, fontSize=72)
-  // "108" ≈ 3 chars × 72px × 0.58 ≈ 125px → right edge at x≈153, letters sit beside/below
-  const anchorX = 150; // canvas units — right of the count
-  const anchorY = 590; // canvas units — slightly below count midpoint
-
-  return (
-    <div
-      style={{
-        position: "absolute",
-        left: anchorX * scale,
-        top: anchorY * scale,
-        display: "flex",
-        alignItems: "flex-end",
-        gap: `${1 * scale}px`,
-        pointerEvents: "none",
-        userSelect: "none",
-      }}
-    >
-      {IMAGES_LETTERS.map(({ char, rotate, tx, ty }) => (
-        <span
-          key={char + rotate}
-          style={{
-            fontFamily: "'FOT-Yuruka Std', Arial Rounded MT Bold, sans-serif",
-            fontWeight: "bold",
-            fontSize: `${42 * scale}px`,
-            color: "#a8d8f0",
-            WebkitTextStroke: `${8 * scale}px #ffffff`,
-            paintOrder: "stroke fill",
-            display: "inline-block",
-            transform: `rotate(${rotate}deg) translate(${tx * scale}px, ${ty * scale}px)`,
-            lineHeight: 1,
-          }}
-        >
-          {char}
-        </span>
-      ))}
-    </div>
-  );
-}
 
 // ── Drop zone ─────────────────────────────────────────────────────────────────
 
@@ -324,6 +299,61 @@ function DropZonePlaceholder({
   );
 }
 
+// ── Selection border (slant-aware, pulsing neon) ─────────────────────────────
+
+function SelectionBorder({
+  colW,
+  colH,
+  slantPx,
+  isFirst,
+}: {
+  colW: number;
+  colH: number;
+  slantPx: number;
+  isFirst: boolean;
+}) {
+  const lineRef = useRef<Konva.Line>(null);
+
+  useEffect(() => {
+    const layer = lineRef.current?.getLayer();
+    if (!layer) return;
+    const anim = new Konva.Animation((frame) => {
+      if (!lineRef.current || !frame) return;
+      const t = 0.5 + 0.5 * Math.sin(frame.time * 0.004);
+      lineRef.current.opacity(0.4 + 0.6 * t);
+      lineRef.current.shadowBlur(6 + 10 * t);
+    }, layer);
+    anim.start();
+    return () => { anim.stop(); };
+  }, []);
+
+  const m = 8; // margin inset
+  const topLeft = isFirst ? m : slantPx + m;
+  const topRight = colW + slantPx - m;
+  const bottomRight = colW - m;
+  const bottomLeft = m;
+
+  return (
+    <Line
+      ref={lineRef}
+      name="ui-only"
+      points={[
+        topLeft, m,
+        topRight, m,
+        bottomRight, colH - m,
+        bottomLeft, colH - m,
+      ]}
+      closed
+      stroke="#06b6d4"
+      strokeWidth={2}
+      shadowColor="#06b6d4"
+      shadowBlur={10}
+      shadowOpacity={1}
+      listening={false}
+    />
+  );
+}
+
 // ── Column divider ────────────────────────────────────────────────────────────
 
 function ColumnDivider({
@@ -356,11 +386,11 @@ function ColumnDivider({
       lineRef.current.dashOffset(-(frame.time * 0.018) % 26);
     }, layer);
     anim.start();
-    return () => anim.stop();
+    return () => { anim.stop(); };
   }, []);
 
   return (
-    <>
+    <Group name="ui-only">
       <Line
         ref={lineRef}
         points={[x + slantPx, 0, x, h]}
@@ -395,7 +425,7 @@ function ColumnDivider({
           e.target.x(x - 4);
         }}
       />
-    </>
+    </Group>
   );
 }
 
@@ -424,6 +454,8 @@ export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number }>(
       brushSize,
       slantPx,
     } = useBannerStore();
+    const isMascotMode =
+      useOverlayStore((s) => s.selectedOverlayId) === "mascot";
 
     // Per-column canvases and history
     const masksRef = useRef<Map<string, HTMLCanvasElement>>(new Map());
@@ -434,10 +466,32 @@ export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number }>(
       {},
     );
     const isPaintingRef = useRef(false);
+    const activeToolRef = useRef<"paint" | "erase">("paint");
     const [brushCursor, setBrushCursor] = useState<{
       x: number;
       y: number;
     } | null>(null);
+
+    // Track image URLs to clear masks when images change
+    const prevImageUrls = useRef<Map<string, string>>(new Map());
+    useEffect(() => {
+      for (const col of columns) {
+        const currentUrl = col.image?.url ?? "";
+        const prevUrl = prevImageUrls.current.get(col.id);
+        if (prevUrl !== undefined && prevUrl !== currentUrl) {
+          // Image changed — clear mask, result, and history
+          const mask = masksRef.current.get(col.id);
+          if (mask)
+            mask.getContext("2d")!.clearRect(0, 0, mask.width, mask.height);
+          const result = resultsRef.current.get(col.id);
+          if (result)
+            result.getContext("2d")!.clearRect(0, 0, result.width, result.height);
+          historyRef.current.delete(col.id);
+          bumpRevision(col.id);
+        }
+        prevImageUrls.current.set(col.id, currentUrl);
+      }
+    }, [columns]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Compute column x positions
     const colXPositions: number[] = [];
@@ -447,22 +501,29 @@ export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number }>(
       cumX += col.widthRatio * canvasWidth;
     }
 
-    // Get or create canvas for a column
+    // Get or create canvas for a column (recreates if dimensions changed)
     function getMask(colId: string, colW: number, colH: number) {
-      if (!masksRef.current.has(colId)) {
+      const w = Math.round(colW);
+      const h = Math.round(colH);
+      const existing = masksRef.current.get(colId);
+      if (!existing || existing.width !== w || existing.height !== h) {
         const c = document.createElement("canvas");
-        c.width = Math.round(colW);
-        c.height = Math.round(colH);
+        c.width = w;
+        c.height = h;
         masksRef.current.set(colId, c);
+        historyRef.current.delete(colId);
       }
       return masksRef.current.get(colId)!;
     }
 
     function getResult(colId: string, colW: number, colH: number) {
-      if (!resultsRef.current.has(colId)) {
+      const w = Math.round(colW);
+      const h = Math.round(colH);
+      const existing = resultsRef.current.get(colId);
+      if (!existing || existing.width !== w || existing.height !== h) {
         const c = document.createElement("canvas");
-        c.width = Math.round(colW);
-        c.height = Math.round(colH);
+        c.width = w;
+        c.height = h;
         resultsRef.current.set(colId, c);
       }
       return resultsRef.current.get(colId)!;
@@ -527,8 +588,7 @@ export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number }>(
     ) {
       const mask = getMask(colId, colW, colH);
       const ctx = mask.getContext("2d")!;
-      const state = useBannerStore.getState();
-      if (state.brushTool === "erase") {
+      if (activeToolRef.current === "erase") {
         ctx.globalCompositeOperation = "destination-out";
         ctx.fillStyle = "rgba(0,0,0,1)";
       } else {
@@ -536,7 +596,7 @@ export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number }>(
         ctx.fillStyle = "rgba(255, 30, 100, 1)";
       }
       ctx.beginPath();
-      ctx.arc(colX, colY, state.brushSize / 2, 0, Math.PI * 2);
+      ctx.arc(colX, colY, useBannerStore.getState().brushSize / 2, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalCompositeOperation = "source-over";
       updateResult(colId, colW, colH);
@@ -596,7 +656,14 @@ export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number }>(
       exportBanner: async () => {
         const stage = stageRef.current;
         if (!stage) throw new Error("No stage");
-        return stage.toDataURL({ pixelRatio: 1 });
+        // Hide UI-only elements for export
+        const uiNodes = stage.find(".ui-only");
+        uiNodes.forEach((n) => n.hide());
+        stage.batchDraw();
+        const url = stage.toDataURL({ pixelRatio: 2 });
+        uiNodes.forEach((n) => n.show());
+        stage.batchDraw();
+        return url;
       },
     }));
 
@@ -610,6 +677,28 @@ export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number }>(
     // Keyboard shortcuts
     useEffect(() => {
       function onKey(e: KeyboardEvent) {
+        // Skip if user is typing in an input/textarea
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
+
+        // B → toggle brush mode
+        if (e.key === "b" && !e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          const s = useBannerStore.getState();
+          s.setBrushMode(!s.brushMode);
+          return;
+        }
+
+        // M → toggle mascot overlay
+        if (e.key === "m" && !e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          const o = useOverlayStore.getState();
+          const newId = o.selectedOverlayId === "mascot" ? null : "mascot";
+          o.setSelectedOverlay(newId);
+          if (newId) useBannerStore.getState().setSelectedColumn(null);
+          return;
+        }
+
         if (!useBannerStore.getState().brushMode) return;
         if (e.key === "z" && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
           e.preventDefault();
@@ -627,29 +716,40 @@ export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number }>(
       return () => window.removeEventListener("keydown", onKey);
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // Convert pixel pointer position to canvas coordinates
+    function getCanvasPointer(): { x: number; y: number } | null {
+      const pos = stageRef.current?.getPointerPosition();
+      if (!pos) return null;
+      return { x: pos.x / scale, y: pos.y / scale };
+    }
+
     // Brush mouse handlers
     function handleStageMouseMove(_e: Konva.KonvaEventObject<MouseEvent>) {
-      const pos = stageRef.current?.getPointerPosition();
+      const pos = getCanvasPointer();
       if (pos) setBrushCursor({ x: pos.x, y: pos.y });
 
       if (!useBannerStore.getState().brushMode || !isPaintingRef.current)
         return;
-      const colIdx = getColumnAtX(pos?.x ?? 0);
-      if (colIdx < 0) return;
-      const col = columns[colIdx];
-      const colW = col.widthRatio * canvasWidth;
-      const colX = (pos?.x ?? 0) - colXPositions[colIdx];
-      paintMask(col.id, colX, pos?.y ?? 0, colW, canvasHeight);
-    }
-
-    function handleStageMouseDown(_e: Konva.KonvaEventObject<MouseEvent>) {
-      if (!useBannerStore.getState().brushMode) return;
-      const pos = stageRef.current?.getPointerPosition();
       if (!pos) return;
       const colIdx = getColumnAtX(pos.x);
       if (colIdx < 0) return;
       const col = columns[colIdx];
       const colW = col.widthRatio * canvasWidth;
+      const colX = pos.x - colXPositions[colIdx];
+      paintMask(col.id, colX, pos.y, colW, canvasHeight);
+    }
+
+    function handleStageMouseDown(e: Konva.KonvaEventObject<MouseEvent>) {
+      if (!useBannerStore.getState().brushMode) return;
+      const pos = getCanvasPointer();
+      if (!pos) return;
+      const colIdx = getColumnAtX(pos.x);
+      if (colIdx < 0) return;
+      const col = columns[colIdx];
+      const colW = col.widthRatio * canvasWidth;
+
+      // Right-click = erase, left-click = paint
+      activeToolRef.current = e.evt.button === 2 ? "erase" : "paint";
 
       // Save undo snapshot BEFORE painting
       const history = getHistory(col.id);
@@ -690,18 +790,7 @@ export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number }>(
         if (!stage) return;
         const stageBox = stage.container().getBoundingClientRect();
         const dropX = (e.clientX - stageBox.left) / scale;
-
-        let cumW = 0;
-        let targetCol: ColumnState | undefined;
-        for (const col of columns) {
-          const colW = col.widthRatio * canvasWidth;
-          if (dropX >= cumW && dropX <= cumW + colW) {
-            targetCol = col;
-            break;
-          }
-          cumW += colW;
-        }
-        if (!targetCol) return;
+        const dropY = (e.clientY - stageBox.top) / scale;
 
         let url = "";
         let name = "";
@@ -715,6 +804,39 @@ export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number }>(
         }
         if (!url) return;
 
+        // If mascot overlay is selected, drop as mascot
+        const overlay = useOverlayStore.getState();
+        if (overlay.selectedOverlayId === "mascot") {
+          const img = new Image();
+          img.onload = () => {
+            const aspect = img.width / img.height;
+            const defaultW = 200;
+            overlay.updateMascot({
+              url,
+              visible: true,
+              x: dropX - defaultW / 2,
+              y: dropY - defaultW / aspect / 2,
+              width: defaultW,
+              height: defaultW / aspect,
+            });
+          };
+          img.src = url;
+          return;
+        }
+
+        // Otherwise drop as column image
+        let cumW = 0;
+        let targetCol: ColumnState | undefined;
+        for (const col of columns) {
+          const colW = col.widthRatio * canvasWidth;
+          if (dropX >= cumW && dropX <= cumW + colW) {
+            targetCol = col;
+            break;
+          }
+          cumW += colW;
+        }
+        if (!targetCol) return;
+
         setColumnImage(targetCol.id, { path: name, url, x: 0, y: 0, scale: 1 });
         setSelectedColumn(targetCol.id);
       },
@@ -723,6 +845,7 @@ export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number }>(
 
     return (
       <div
+        className={isMascotMode ? "mascot-mode-border" : ""}
         style={{
           position: "relative",
           width: canvasWidth * scale,
@@ -730,6 +853,7 @@ export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number }>(
         }}
         onDrop={handleDrop}
         onDragOver={(e) => e.preventDefault()}
+        onContextMenu={(e) => e.preventDefault()}
       >
         <Stage
           ref={stageRef}
@@ -741,9 +865,25 @@ export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number }>(
           onMouseDown={handleStageMouseDown}
           onMouseUp={handleStageMouseUp}
           onMouseLeave={handleStageMouseLeave}
+          onWheel={(e) => {
+            if (!brushMode) return;
+            e.evt.preventDefault();
+            const delta = e.evt.deltaY;
+            const step = Math.max(1, Math.round(brushSize * 0.1));
+            useBannerStore
+              .getState()
+              .setBrushSize(
+                Math.max(5, Math.min(200, brushSize + (delta > 0 ? -step : step))),
+              );
+          }}
           style={{ cursor: brushMode ? "none" : "default" }}
           onClick={(e) => {
-            if (e.target === e.target.getStage()) setSelectedColumn(null);
+            if (e.target === e.target.getStage()) {
+              if (!brushMode && !isMascotMode) {
+                setSelectedColumn(null);
+                useOverlayStore.getState().setSelectedOverlay(null);
+              }
+            }
           }}
         >
           <Layer>
@@ -770,7 +910,11 @@ export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number }>(
                     ctx.lineTo(0, canvasHeight);
                     ctx.closePath();
                   }}
-                  onClick={() => !brushMode && setSelectedColumn(col.id)}
+                  onClick={() => {
+                    if (brushMode || isMascotMode) return;
+                    setSelectedColumn(col.id);
+                    useOverlayStore.getState().setSelectedOverlay(null);
+                  }}
                 >
                   {col.image ? (
                     <ColumnImageLayer
@@ -794,7 +938,11 @@ export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number }>(
                           ),
                         );
                       }}
-                      onClick={() => setSelectedColumn(col.id)}
+                      onClick={() => {
+                        if (isMascotMode) return;
+                        setSelectedColumn(col.id);
+                        useOverlayStore.getState().setSelectedOverlay(null);
+                      }}
                     />
                   ) : (
                     <DropZonePlaceholder
@@ -805,13 +953,11 @@ export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number }>(
                   )}
 
                   {isSelected && (
-                    <Rect
-                      width={colW}
-                      height={canvasHeight}
-                      fill="transparent"
-                      stroke="#06b6d4"
-                      strokeWidth={2}
-                      listening={false}
+                    <SelectionBorder
+                      colW={colW}
+                      colH={canvasHeight}
+                      slantPx={slantPx}
+                      isFirst={i === 0}
                     />
                   )}
                 </Group>
@@ -833,6 +979,7 @@ export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number }>(
             {/* Brush cursor */}
             {brushMode && brushCursor && (
               <Circle
+                name="ui-only"
                 x={brushCursor.x}
                 y={brushCursor.y}
                 radius={brushSize / 2}
@@ -849,7 +996,6 @@ export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number }>(
           </Layer>
           <OverlayLayer canvasWidth={canvasWidth} />
         </Stage>
-        <ImagesLetters scale={scale} />
       </div>
     );
   },
@@ -859,5 +1005,11 @@ export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number }>(
 export async function exportBanner(): Promise<string> {
   const stage = Konva.stages[0];
   if (!stage) throw new Error("No stage found");
-  return stage.toDataURL({ pixelRatio: 1 });
+  const uiNodes = stage.find(".ui-only");
+  uiNodes.forEach((n) => n.hide());
+  stage.batchDraw();
+  const url = stage.toDataURL({ pixelRatio: 2 });
+  uiNodes.forEach((n) => n.show());
+  stage.batchDraw();
+  return url;
 }

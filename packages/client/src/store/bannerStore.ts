@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import type { ColumnState, FilterState, ImageState } from '../types';
 
 let _id = 0;
@@ -62,99 +63,123 @@ interface BannerStore {
   setBrushPixelSize: (s: number) => void;
 }
 
-export const useBannerStore = create<BannerStore>((set, get) => ({
-  canvasWidth: 1280,
-  canvasHeight: 720,
-  columnCount: 3,
-  columns: makeEqualColumns(3),
-  selectedColumnId: null,
-  slantPx: 15,
+export const useBannerStore = create<BannerStore>()(
+  persist(
+    (set, get) => ({
+      canvasWidth: 1280,
+      canvasHeight: 720,
+      columnCount: 3,
+      columns: makeEqualColumns(3),
+      selectedColumnId: null,
+      slantPx: 15,
 
-  // Brush initial values
-  brushMode: false,
-  brushTool: 'paint',
-  brushSize: 40,
-  brushFilterType: 'pixelate',
-  brushBlurRadius: 20,
-  brushPixelSize: 20,
+      brushMode: true,
+      brushTool: 'paint',
+      brushSize: 40,
+      brushFilterType: 'pixelate',
+      brushBlurRadius: 20,
+      brushPixelSize: 20,
 
-  setDimensions: (canvasWidth, canvasHeight) => set({ canvasWidth, canvasHeight }),
+      setDimensions: (canvasWidth, canvasHeight) => set({ canvasWidth, canvasHeight }),
 
-  setColumnCount: (count) => {
-    const { columns } = get();
-    const ratio = 1 / count;
+      setColumnCount: (count) => {
+        const { columns } = get();
+        const ratio = 1 / count;
+        let newColumns: ColumnState[];
+        if (count >= columns.length) {
+          const extras = Array.from({ length: count - columns.length }, () => makeColumn(ratio));
+          newColumns = [...columns, ...extras].map((c) => ({ ...c, widthRatio: ratio }));
+        } else {
+          newColumns = columns.slice(0, count).map((c) => ({ ...c, widthRatio: ratio }));
+        }
+        set({ columnCount: count, columns: newColumns });
+      },
 
-    let newColumns: ColumnState[];
-    if (count >= columns.length) {
-      // Add empty columns, redistribute widths evenly
-      const extras = Array.from({ length: count - columns.length }, () => makeColumn(ratio));
-      newColumns = [...columns, ...extras].map((c) => ({ ...c, widthRatio: ratio }));
-    } else {
-      // Drop columns from the end, redistribute widths evenly
-      newColumns = columns.slice(0, count).map((c) => ({ ...c, widthRatio: ratio }));
-    }
+      setSelectedColumn: (id) => set({ selectedColumnId: id }),
 
-    set({ columnCount: count, columns: newColumns });
-  },
+      setColumnImage: (columnId, image) =>
+        set((s) => ({
+          columns: s.columns.map((c) => (c.id === columnId ? { ...c, image } : c)),
+        })),
 
-  setSelectedColumn: (id) => set({ selectedColumnId: id }),
+      clearColumnImage: (columnId) =>
+        set((s) => ({
+          columns: s.columns.map((c) => (c.id === columnId ? { ...c, image: null } : c)),
+        })),
 
-  setColumnImage: (columnId, image) =>
-    set((s) => ({
-      columns: s.columns.map((c) => (c.id === columnId ? { ...c, image } : c)),
-    })),
+      updateImagePosition: (columnId, x, y) =>
+        set((s) => ({
+          columns: s.columns.map((c) =>
+            c.id === columnId && c.image ? { ...c, image: { ...c.image, x, y } } : c,
+          ),
+        })),
 
-  clearColumnImage: (columnId) =>
-    set((s) => ({
-      columns: s.columns.map((c) => (c.id === columnId ? { ...c, image: null } : c)),
-    })),
+      updateImageScale: (columnId, scale) =>
+        set((s) => ({
+          columns: s.columns.map((c) =>
+            c.id === columnId && c.image ? { ...c, image: { ...c.image, scale } } : c,
+          ),
+        })),
 
-  updateImagePosition: (columnId, x, y) =>
-    set((s) => ({
-      columns: s.columns.map((c) =>
-        c.id === columnId && c.image ? { ...c, image: { ...c.image, x, y } } : c,
-      ),
-    })),
+      updateFilter: (columnId, patch) =>
+        set((s) => ({
+          columns: s.columns.map((c) =>
+            c.id === columnId ? { ...c, filter: { ...c.filter, ...patch } } : c,
+          ),
+        })),
 
-  updateImageScale: (columnId, scale) =>
-    set((s) => ({
-      columns: s.columns.map((c) =>
-        c.id === columnId && c.image ? { ...c, image: { ...c.image, scale } } : c,
-      ),
-    })),
+      resizeColumns: (leftId, rightId, delta) => {
+        const { columns, canvasWidth } = get();
+        const minRatio = 80 / canvasWidth;
+        const left = columns.find((c) => c.id === leftId)!;
+        const right = columns.find((c) => c.id === rightId)!;
+        const deltaRatio = delta / canvasWidth;
+        const newLeft = Math.max(minRatio, left.widthRatio + deltaRatio);
+        const newRight = Math.max(minRatio, right.widthRatio - deltaRatio);
+        if (newLeft + newRight !== left.widthRatio + right.widthRatio) return;
+        set({
+          columns: columns.map((c) => {
+            if (c.id === leftId) return { ...c, widthRatio: newLeft };
+            if (c.id === rightId) return { ...c, widthRatio: newRight };
+            return c;
+          }),
+        });
+      },
 
-  updateFilter: (columnId, patch) =>
-    set((s) => ({
-      columns: s.columns.map((c) =>
-        c.id === columnId ? { ...c, filter: { ...c.filter, ...patch } } : c,
-      ),
-    })),
+      setSlantPx: (px) => set({ slantPx: px }),
 
-  resizeColumns: (leftId, rightId, delta) => {
-    const { columns, canvasWidth } = get();
-    const minRatio = 80 / canvasWidth; // min column width ~80px
-    const left = columns.find((c) => c.id === leftId)!;
-    const right = columns.find((c) => c.id === rightId)!;
-    const deltaRatio = delta / canvasWidth;
-    const newLeft = Math.max(minRatio, left.widthRatio + deltaRatio);
-    const newRight = Math.max(minRatio, right.widthRatio - deltaRatio);
-    if (newLeft + newRight !== left.widthRatio + right.widthRatio) return; // clamped
-    set({
-      columns: columns.map((c) => {
-        if (c.id === leftId) return { ...c, widthRatio: newLeft };
-        if (c.id === rightId) return { ...c, widthRatio: newRight };
-        return c;
+      setBrushMode: (on) => set({ brushMode: on }),
+      setBrushTool: (tool) => set({ brushTool: tool }),
+      setBrushSize: (size) => set({ brushSize: size }),
+      setBrushFilterType: (type) => set({ brushFilterType: type }),
+      setBrushBlurRadius: (r) => set({ brushBlurRadius: r }),
+      setBrushPixelSize: (s) => set({ brushPixelSize: s }),
+    }),
+    {
+      name: 'thumbnail-helper-banner',
+      // Strip blob image URLs (they die on reload) and transient UI state
+      partialize: (state) => ({
+        canvasWidth: state.canvasWidth,
+        canvasHeight: state.canvasHeight,
+        columnCount: state.columnCount,
+        slantPx: state.slantPx,
+        columns: state.columns.map((c) => ({ ...c, image: null })),
+        brushMode: state.brushMode,
+        brushTool: state.brushTool,
+        brushSize: state.brushSize,
+        brushFilterType: state.brushFilterType,
+        brushBlurRadius: state.brushBlurRadius,
+        brushPixelSize: state.brushPixelSize,
       }),
-    });
-  },
-
-  setSlantPx: (px) => set({ slantPx: px }),
-
-  // Brush actions
-  setBrushMode: (on) => set({ brushMode: on }),
-  setBrushTool: (tool) => set({ brushTool: tool }),
-  setBrushSize: (size) => set({ brushSize: size }),
-  setBrushFilterType: (type) => set({ brushFilterType: type }),
-  setBrushBlurRadius: (r) => set({ brushBlurRadius: r }),
-  setBrushPixelSize: (s) => set({ brushPixelSize: s }),
-}));
+      // Sync the uid counter so new columns don't clash with restored IDs
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+        const maxId = state.columns.reduce((max, c) => {
+          const n = parseInt(c.id.replace('col-', ''), 10);
+          return isNaN(n) ? max : Math.max(max, n);
+        }, 0);
+        _id = maxId;
+      },
+    },
+  ),
+);
