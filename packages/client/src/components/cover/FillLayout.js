@@ -56,69 +56,150 @@ export function computeMainImageRect(canvasSize, mainW, mainH) {
     }
 }
 /**
- * Single-row (horizontal gap) or single-column (vertical gap) layout.
- *
- * Cover-fit the row as a unit: scale up to fill BOTH dimensions of the gap,
- * center, and let the canvas clip group trim overflow. Images keep their
- * natural aspect ratio — they just lose a tiny bit of edge.
+ * Greedy row packing: split images into rows targeting a given row height.
+ * Each row accumulates images until its natural width >= gap width.
  */
-function layoutSingleLine(gap, images, isVertical) {
+function packRows(images, gapW, targetRowH) {
+    const rows = [];
+    let current = { images: [], aspects: [], totalAspect: 0 };
+    for (const img of images) {
+        const aspect = img.naturalWidth / img.naturalHeight;
+        current.images.push(img);
+        current.aspects.push(aspect);
+        current.totalAspect += aspect;
+        // Row natural width at targetRowH
+        const rowNaturalW = current.totalAspect * targetRowH;
+        if (rowNaturalW >= gapW && current.images.length > 0) {
+            rows.push(current);
+            current = { images: [], aspects: [], totalAspect: 0 };
+        }
+    }
+    // Remaining images go into the last row
+    if (current.images.length > 0) {
+        if (rows.length > 0 && current.images.length === 1) {
+            // Single leftover image: merge into last row for better balance
+            const last = rows[rows.length - 1];
+            last.images.push(...current.images);
+            last.aspects.push(...current.aspects);
+            last.totalAspect += current.totalAspect;
+        }
+        else {
+            rows.push(current);
+        }
+    }
+    return rows;
+}
+/**
+ * Same as packRows but for columns (vertical gap).
+ */
+function packColumns(images, gapH, targetColW) {
+    const cols = [];
+    let current = { images: [], aspects: [], totalAspect: 0 };
+    for (const img of images) {
+        const invAspect = img.naturalHeight / img.naturalWidth;
+        current.images.push(img);
+        current.aspects.push(invAspect);
+        current.totalAspect += invAspect;
+        const colNaturalH = current.totalAspect * targetColW;
+        if (colNaturalH >= gapH && current.images.length > 0) {
+            cols.push(current);
+            current = { images: [], aspects: [], totalAspect: 0 };
+        }
+    }
+    if (current.images.length > 0) {
+        if (cols.length > 0 && current.images.length === 1) {
+            const last = cols[cols.length - 1];
+            last.images.push(...current.images);
+            last.aspects.push(...current.aspects);
+            last.totalAspect += current.totalAspect;
+        }
+        else {
+            cols.push(current);
+        }
+    }
+    return cols;
+}
+/**
+ * Multi-row justified layout for a horizontal gap.
+ *
+ * 1. Estimate ideal row count from combined aspect ratios
+ * 2. Greedy-pack images into rows at target height
+ * 3. Justify each row to fill gap width exactly
+ * 4. Cover-fit: scale all rows uniformly so total height fills gap
+ */
+function layoutHorizontalGap(gap, images) {
     if (images.length === 0)
         return [];
+    const aspects = images.map((img) => img.naturalWidth / img.naturalHeight);
+    const totalAspect = aspects.reduce((sum, a) => sum + a, 0);
+    // Ideal row count: balances row height vs density
+    const idealRows = Math.max(1, Math.round(Math.sqrt(totalAspect * gap.height / gap.width)));
+    const targetRowH = gap.height / idealRows;
+    // Pack into rows
+    const rows = packRows(images, gap.width, targetRowH);
+    // Justify each row: compute justified heights
+    const justifiedHeights = rows.map((row) => gap.width / row.totalAspect);
+    const totalJustifiedH = justifiedHeights.reduce((sum, h) => sum + h, 0);
+    // Cover-fit: scale up so rows fill gap height (use max scale for no black space)
+    const scale = Math.max(gap.height / totalJustifiedH, 1);
+    const totalScaledH = totalJustifiedH * scale;
+    // Center vertically (overflow clipped by canvas)
+    const offsetY = gap.y + (gap.height - totalScaledH) / 2;
     const rects = [];
-    if (!isVertical) {
-        // Horizontal gap: single row
-        // 1. Natural widths at gap.height
-        const naturalWidths = images.map((img) => gap.height * (img.naturalWidth / img.naturalHeight));
-        const totalNaturalW = naturalWidths.reduce((sum, w) => sum + w, 0);
-        // 2. Cover-fit: use the LARGER scale so both dimensions are filled
-        const scaleW = gap.width / totalNaturalW; // scale to fill width
-        const scaleH = 1; // already at gap.height
-        const scale = Math.max(scaleW, scaleH); // pick larger → no black space
-        const rowH = gap.height * scale;
-        const totalW = totalNaturalW * scale;
-        // 3. Center in gap (overflow clipped)
-        const offsetX = gap.x + (gap.width - totalW) / 2;
-        const offsetY = gap.y + (gap.height - rowH) / 2;
-        let x = offsetX;
-        for (let i = 0; i < images.length; i++) {
-            const w = naturalWidths[i] * scale;
+    let y = offsetY;
+    for (let r = 0; r < rows.length; r++) {
+        const row = rows[r];
+        const rowH = justifiedHeights[r] * scale;
+        let x = gap.x;
+        for (let i = 0; i < row.images.length; i++) {
+            const w = row.aspects[i] * rowH;
             rects.push({
-                imageId: images[i].id,
+                imageId: row.images[i].id,
                 x,
-                y: offsetY,
+                y,
                 width: w,
                 height: rowH,
             });
             x += w;
         }
+        y += rowH;
     }
-    else {
-        // Vertical gap: single column
-        // 1. Natural heights at gap.width
-        const naturalHeights = images.map((img) => gap.width / (img.naturalWidth / img.naturalHeight));
-        const totalNaturalH = naturalHeights.reduce((sum, h) => sum + h, 0);
-        // 2. Cover-fit: use the LARGER scale
-        const scaleH = gap.height / totalNaturalH;
-        const scaleW = 1;
-        const scale = Math.max(scaleH, scaleW);
-        const colW = gap.width * scale;
-        const totalH = totalNaturalH * scale;
-        // 3. Center in gap (overflow clipped)
-        const offsetX = gap.x + (gap.width - colW) / 2;
-        const offsetY = gap.y + (gap.height - totalH) / 2;
-        let y = offsetY;
-        for (let i = 0; i < images.length; i++) {
-            const h = naturalHeights[i] * scale;
+    return rects;
+}
+/**
+ * Multi-column justified layout for a vertical gap.
+ */
+function layoutVerticalGap(gap, images) {
+    if (images.length === 0)
+        return [];
+    const invAspects = images.map((img) => img.naturalHeight / img.naturalWidth);
+    const totalInvAspect = invAspects.reduce((sum, a) => sum + a, 0);
+    const idealCols = Math.max(1, Math.round(Math.sqrt(totalInvAspect * gap.width / gap.height)));
+    const targetColW = gap.width / idealCols;
+    const cols = packColumns(images, gap.height, targetColW);
+    const justifiedWidths = cols.map((col) => gap.height / col.totalAspect);
+    const totalJustifiedW = justifiedWidths.reduce((sum, w) => sum + w, 0);
+    const scale = Math.max(gap.width / totalJustifiedW, 1);
+    const totalScaledW = totalJustifiedW * scale;
+    const offsetX = gap.x + (gap.width - totalScaledW) / 2;
+    const rects = [];
+    let x = offsetX;
+    for (let c = 0; c < cols.length; c++) {
+        const col = cols[c];
+        const colW = justifiedWidths[c] * scale;
+        let y = gap.y;
+        for (let i = 0; i < col.images.length; i++) {
+            const h = col.aspects[i] * colW;
             rects.push({
-                imageId: images[i].id,
-                x: offsetX,
+                imageId: col.images[i].id,
+                x,
                 y,
                 width: colW,
                 height: h,
             });
             y += h;
         }
+        x += colW;
     }
     return rects;
 }
@@ -144,7 +225,12 @@ export function computeFillLayout(canvasSize, mainImage, fillPool, fillCount, fi
     const selected = shuffled.slice(0, count);
     const allRects = [];
     for (const gap of gaps) {
-        allRects.push(...layoutSingleLine(gap, selected, isVertical));
+        if (isVertical) {
+            allRects.push(...layoutVerticalGap(gap, selected));
+        }
+        else {
+            allRects.push(...layoutHorizontalGap(gap, selected));
+        }
     }
     return allRects;
 }
