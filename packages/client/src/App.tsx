@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Brush } from 'lucide-react';
 import { Toolbar } from './components/Toolbar';
 import { Sidebar, type LocalFile } from './components/Sidebar';
@@ -10,7 +10,7 @@ import { useBannerStore } from './store/bannerStore';
 import { useOverlayStore } from './store/overlayStore';
 
 export default function App() {
-  const { canvasWidth, canvasHeight, selectedColumnId, brushMode, setBrushMode } = useBannerStore();
+  const { canvasWidth, canvasHeight, selectedColumnId, brushMode, setBrushMode, columns } = useBannerStore();
   const selectedOverlayId = useOverlayStore((s) => s.selectedOverlayId);
   const canvasAreaRef = useRef<HTMLDivElement>(null);
   const bannerCanvasRef = useRef<BannerCanvasHandle>(null);
@@ -31,10 +31,31 @@ export default function App() {
     return () => ro.disconnect();
   }, [canvasWidth, canvasHeight]);
 
-  function handleFilesLoaded(newFiles: LocalFile[]) {
+  function addFilesToSidebar(newFiles: LocalFile[]) {
     setSidebarFiles((prev) => {
-      prev.forEach((f) => { if (f.url.startsWith('blob:')) URL.revokeObjectURL(f.url); });
-      return newFiles;
+      const existingNames = new Set(prev.map((f) => f.name));
+      const unique = newFiles.filter((f) => !existingNames.has(f.name));
+      return [...prev, ...unique];
+    });
+  }
+
+  function handleFilesLoaded(newFiles: LocalFile[]) {
+    addFilesToSidebar(newFiles);
+  }
+
+  const usedUrls = useMemo(() => {
+    const urls = new Set<string>();
+    for (const col of columns) {
+      if (col.image) urls.add(col.image.url);
+    }
+    return urls;
+  }, [columns]);
+
+  function handleClearUnused() {
+    setSidebarFiles((prev) => {
+      const unused = prev.filter((f) => !usedUrls.has(f.url));
+      unused.forEach((f) => { if (f.url.startsWith('blob:')) URL.revokeObjectURL(f.url); });
+      return prev.filter((f) => usedUrls.has(f.url));
     });
   }
 
@@ -51,6 +72,8 @@ export default function App() {
           files={sidebarFiles}
           onFilesLoaded={handleFilesLoaded}
           hasSelectedColumn={!!selectedColumnId}
+          usedUrls={usedUrls}
+          onClearUnused={handleClearUnused}
           onImageClick={(file) => {
             if (!selectedColumnId) return;
             useBannerStore.getState().setColumnImage(selectedColumnId, {
@@ -68,7 +91,11 @@ export default function App() {
             ref={canvasAreaRef}
             className="flex-1 flex items-center justify-center bg-[#111] overflow-hidden"
           >
-            <BannerCanvas ref={bannerCanvasRef} scale={scale} />
+            <BannerCanvas
+              ref={bannerCanvasRef}
+              scale={scale}
+              onImagesDropped={(files) => addFilesToSidebar(files.map((f) => ({ name: f.name, url: f.url })))}
+            />
           </div>
 
           {/* Bottom panels */}

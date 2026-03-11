@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(pnpm install:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(cd E:/Project/thumbnail-helper && pnpm --filter client build 2>&1 | tail -20)",
+      "Bash(cd E:/Project/thumbnail-helper && pnpm --filter client build 2>&1 | tail -15)"
     ]
   }
 }

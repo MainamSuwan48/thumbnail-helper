@@ -438,8 +438,8 @@ export interface BannerCanvasHandle {
   exportBanner: () => Promise<string>;
 }
 
-export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number }>(
-  function BannerCanvas({ scale }, ref) {
+export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number; onImagesDropped?: (files: { name: string; url: string }[]) => void }>(
+  function BannerCanvas({ scale, onImagesDropped }, ref) {
     const stageRef = useRef<Konva.Stage>(null);
     const {
       canvasWidth,
@@ -792,21 +792,24 @@ export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number }>(
         const dropX = (e.clientX - stageBox.left) / scale;
         const dropY = (e.clientY - stageBox.top) / scale;
 
-        let url = "";
-        let name = "";
-        if (e.dataTransfer.files.length > 0) {
-          const file = e.dataTransfer.files[0];
-          if (!file.type.startsWith("image/")) return;
-          url = URL.createObjectURL(file);
-          name = file.name;
+        // Collect all dropped images
+        const droppedImages: { name: string; url: string }[] = [];
+        const isFromExplorer = e.dataTransfer.files.length > 0;
+        if (isFromExplorer) {
+          for (const file of Array.from(e.dataTransfer.files)) {
+            if (!file.type.startsWith("image/")) continue;
+            droppedImages.push({ name: file.name, url: URL.createObjectURL(file) });
+          }
         } else {
-          url = e.dataTransfer.getData("text/plain");
+          const url = e.dataTransfer.getData("text/plain");
+          if (url) droppedImages.push({ name: "", url });
         }
-        if (!url) return;
+        if (droppedImages.length === 0) return;
 
-        // If mascot overlay is selected, drop as mascot
+        // If mascot overlay is selected, drop first image as mascot
         const overlay = useOverlayStore.getState();
         if (overlay.selectedOverlayId === "mascot") {
+          const { url } = droppedImages[0];
           const img = new Image();
           img.onload = () => {
             const aspect = img.width / img.height;
@@ -821,10 +824,26 @@ export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number }>(
             });
           };
           img.src = url;
+          // Sync remaining images to sidebar
+          if (isFromExplorer && droppedImages.length > 1) onImagesDropped?.(droppedImages.slice(1));
           return;
         }
 
-        // Otherwise drop as column image
+        // Multi-image: auto-allocate last N images to N columns
+        if (droppedImages.length > 1) {
+          const colCount = columns.length;
+          // Take the last colCount images (or all if fewer than colCount)
+          const toPlace = droppedImages.slice(-colCount);
+          toPlace.forEach((img, i) => {
+            setColumnImage(columns[i].id, { path: img.name, url: img.url, x: 0, y: 0, scale: 1 });
+          });
+          setSelectedColumn(columns[toPlace.length - 1].id);
+          // Sync all dropped images to sidebar
+          if (isFromExplorer) onImagesDropped?.(droppedImages);
+          return;
+        }
+
+        // Single image: drop into the column under cursor
         let cumW = 0;
         let targetCol: ColumnState | undefined;
         for (const col of columns) {
@@ -837,10 +856,12 @@ export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number }>(
         }
         if (!targetCol) return;
 
-        setColumnImage(targetCol.id, { path: name, url, x: 0, y: 0, scale: 1 });
+        setColumnImage(targetCol.id, { path: droppedImages[0].name, url: droppedImages[0].url, x: 0, y: 0, scale: 1 });
         setSelectedColumn(targetCol.id);
+        // Sync to sidebar
+        if (isFromExplorer) onImagesDropped?.(droppedImages);
       },
-      [columns, canvasWidth, scale, setColumnImage, setSelectedColumn],
+      [columns, canvasWidth, scale, setColumnImage, setSelectedColumn, onImagesDropped],
     );
 
     return (
