@@ -1,19 +1,19 @@
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
 export const useOverlayStore = create()(persist((set) => ({
     selectedOverlayId: null,
     picCount: {
         visible: true,
         x: 28,
         bottomOffset: 165,
-        count: '108',
+        count: "108",
         fontSize: 72,
-        color: '#ff6b8a',
-        opacity: 0.9,
+        color: "#ff6b8a",
+        opacity: 1,
         scale: 1,
         shadowEnabled: true,
         strokeEnabled: true,
-        strokeColor: '#ffffff',
+        strokeColor: "#ffffff",
         strokeWidth: 16,
     },
     mascot: {
@@ -26,7 +26,7 @@ export const useOverlayStore = create()(persist((set) => ({
         url: null,
         outlineEnabled: true,
         outlineThickness: 4,
-        outlineColor: '#ffffff',
+        outlineColor: "#ffffff",
     },
     logo: {
         scale: 1,
@@ -36,7 +36,7 @@ export const useOverlayStore = create()(persist((set) => ({
     updateMascot: (p) => set((s) => ({ mascot: { ...s.mascot, ...p } })),
     updateLogo: (p) => set((s) => ({ logo: { ...s.logo, ...p } })),
 }), {
-    name: 'thumbnail-helper-overlay-v2',
+    name: "thumbnail-helper-overlay-v2",
     partialize: (state) => ({
         picCount: state.picCount,
         mascot: { ...state.mascot, url: null, visible: false },

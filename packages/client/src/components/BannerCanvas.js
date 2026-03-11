@@ -409,7 +409,10 @@ export const BannerCanvas = forwardRef(function BannerCanvas({ scale, onImagesDr
             if (e.key === "b" && !e.ctrlKey && !e.metaKey) {
                 e.preventDefault();
                 const s = useBannerStore.getState();
-                s.setBrushMode(!s.brushMode);
+                const next = !s.brushMode;
+                s.setBrushMode(next);
+                if (next)
+                    useOverlayStore.getState().setSelectedOverlay(null);
                 return;
             }
             // M → toggle mascot overlay
@@ -418,8 +421,10 @@ export const BannerCanvas = forwardRef(function BannerCanvas({ scale, onImagesDr
                 const o = useOverlayStore.getState();
                 const newId = o.selectedOverlayId === "mascot" ? null : "mascot";
                 o.setSelectedOverlay(newId);
-                if (newId)
+                if (newId) {
                     useBannerStore.getState().setSelectedColumn(null);
+                    useBannerStore.getState().setBrushMode(false);
+                }
                 return;
             }
             if (!useBannerStore.getState().brushMode)

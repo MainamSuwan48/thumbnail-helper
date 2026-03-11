@@ -72,7 +72,9 @@ export function Toolbar({ canvasRef }) {
                                 const o = useOverlayStore.getState();
                                 const newId = o.selectedOverlayId === id ? null : id;
                                 o.setSelectedOverlay(newId);
-                                if (newId)
+                                if (newId) {
                                     useBannerStore.getState().setSelectedColumn(null);
+                                    useBannerStore.getState().setBrushMode(false);
+                                }
                             }, title: id, className: "w-7 h-6 rounded text-xs bg-surface-overlay text-gray-300 hover:bg-surface-border hover:text-gray-100 transition-colors", children: icon }, id))) })] }), _jsx("div", { className: "flex-1" }), exportMsg && (_jsx("span", { className: "text-xs text-green-400 max-w-xs truncate", title: exportMsg, children: exportMsg })), _jsxs("button", { onClick: handleExport, disabled: exporting, className: "flex items-center gap-1.5 px-3 py-1.5 rounded bg-accent hover:bg-accent-hover disabled:opacity-50 text-white text-xs font-medium transition-colors", children: [_jsx(Download, { size: 13 }), exporting ? 'Exporting…' : 'Export PNG'] })] }));
 }

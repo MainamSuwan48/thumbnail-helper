@@ -175,7 +175,10 @@ export function Toolbar({ canvasRef }: { canvasRef: React.RefObject<BannerCanvas
                 const o = useOverlayStore.getState();
                 const newId = o.selectedOverlayId === id ? null : id;
                 o.setSelectedOverlay(newId);
-                if (newId) useBannerStore.getState().setSelectedColumn(null);
+                if (newId) {
+                  useBannerStore.getState().setSelectedColumn(null);
+                  useBannerStore.getState().setBrushMode(false);
+                }
               }}
               title={id}
               className="w-7 h-6 rounded text-xs bg-surface-overlay text-gray-300 hover:bg-surface-border hover:text-gray-100 transition-colors"
