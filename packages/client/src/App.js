@@ -12,6 +12,7 @@ import { CoverCanvas } from './components/cover/CoverCanvas';
 import { CoverToolbar } from './components/cover/CoverToolbar';
 import { useBannerStore } from './store/bannerStore';
 import { useCoverStore, coverUid } from './store/coverStore';
+import { computeSelectedFill } from './components/cover/FillLayout';
 import { useOverlayStore } from './store/overlayStore';
 export default function App() {
     const [activeTab, setActiveTab] = useState('banner');
@@ -25,6 +26,9 @@ export default function App() {
     const coverCanvasSize = useCoverStore((s) => s.canvasSize);
     const coverMainImage = useCoverStore((s) => s.mainImage);
     const coverFillPool = useCoverStore((s) => s.fillPool);
+    const coverFillCount = useCoverStore((s) => s.fillCount);
+    const coverFillSeed = useCoverStore((s) => s.fillSeed);
+    const coverCellAssignments = useCoverStore((s) => s.cellAssignments);
     const coverCanvasAreaRef = useRef(null);
     const coverCanvasRef = useRef(null);
     const [coverScale, setCoverScale] = useState(1);
@@ -114,6 +118,20 @@ export default function App() {
         return urls;
     }, [coverMainImage, coverFillPool]);
     const usedUrls = activeTab === 'banner' ? bannerUsedUrls : coverUsedUrls;
+    // Map sidebar image url → cell label for cover mode indicators
+    const coverCellLabels = useMemo(() => {
+        const labels = new Map();
+        if (!coverMainImage)
+            return labels;
+        labels.set(coverMainImage.url, 'MAIN');
+        const selected = computeSelectedFill(coverFillPool, coverFillCount, coverFillSeed, coverCellAssignments);
+        for (let i = 0; i < selected.length; i++) {
+            const img = selected[i];
+            if (img)
+                labels.set(img.url, String(i + 1));
+        }
+        return labels;
+    }, [coverMainImage, coverFillPool, coverFillCount, coverFillSeed, coverCellAssignments]);
     function handleClearUnused() {
         setSidebarFiles((prev) => {
             const unused = prev.filter((f) => !usedUrls.has(f.url));
@@ -194,11 +212,30 @@ export default function App() {
         else {
             const store = useCoverStore.getState();
             const coverImage = await loadAsCoverImage(file);
-            if (!store.mainImage) {
+            const sel = store.selectedCellId;
+            if (sel === 'main') {
+                // Replace main image, move old main to pool
+                const oldMain = store.mainImage;
+                const existing = store.fillPool.find((f) => f.url === file.url);
+                if (existing)
+                    store.removeFromFillPool(existing.id);
                 store.setMainImage(coverImage);
+                if (oldMain)
+                    store.addToFillPool([oldMain]);
+            }
+            else if (typeof sel === 'number') {
+                // Place image into the selected fill slot
+                store.addToFillPool([coverImage]);
+                store.assignCell(sel, coverImage.id);
             }
             else {
-                store.addToFillPool([coverImage]);
+                // No selection: default behavior
+                if (!store.mainImage) {
+                    store.setMainImage(coverImage);
+                }
+                else {
+                    store.addToFillPool([coverImage]);
+                }
             }
         }
     }, [activeTab, selectedColumnId]);
@@ -220,10 +257,11 @@ export default function App() {
     const showOverlayPanel = !!selectedOverlayId;
     const showFilterPanel = !showOverlayPanel && !brushMode && !!selectedColumnId;
     const showBrushPanel = !showOverlayPanel && brushMode;
+    const coverSelectedCell = useCoverStore((s) => s.selectedCellId);
     const sidebarHint = activeTab === 'banner'
         ? !!selectedColumnId
-        : !useCoverStore.getState().mainImage;
-    return (_jsxs("div", { className: "flex flex-col h-screen overflow-hidden", children: [_jsx(TabBar, { activeTab: activeTab, onTabChange: setActiveTab }), activeTab === 'banner' && _jsx(Toolbar, { canvasRef: bannerCanvasRef }), activeTab === 'cover' && _jsx(CoverToolbar, { canvasRef: coverCanvasRef }), _jsxs("div", { className: "flex flex-1 overflow-hidden", children: [_jsx(Sidebar, { files: sidebarFiles, onFilesLoaded: handleFilesLoaded, hasSelectedColumn: sidebarHint, usedUrls: usedUrls, onClearUnused: handleClearUnused, onImageClick: handleImageClick, mode: activeTab, mainImageUrl: coverMainImage?.url ?? null, onSetAsMain: handleSetAsMain, onClearAll: handleClearAll, onRemoveFile: handleRemoveFile }), _jsxs("main", { className: "flex flex-col flex-1 overflow-hidden", children: [_jsxs("div", { className: `flex flex-col flex-1 overflow-hidden ${activeTab !== 'banner' ? 'hidden' : ''}`, children: [_jsx("div", { ref: bannerCanvasAreaRef, className: "flex-1 flex items-center justify-center bg-[#111] overflow-hidden", children: _jsx(BannerCanvas, { ref: bannerCanvasRef, scale: bannerScale, onImagesDropped: (files) => addBannerFiles(files.map((f) => ({ name: f.name, url: f.url }))) }) }), showOverlayPanel && _jsx(OverlayPanel, {}), showFilterPanel && _jsx(FilterPanel, {}), showBrushPanel && _jsx(BrushPanel, {}), _jsxs("div", { className: "border-t border-surface-border bg-surface px-4 py-1.5 flex items-center gap-3", children: [_jsxs("button", { onClick: () => {
+        : coverSelectedCell != null || !coverMainImage;
+    return (_jsxs("div", { className: "flex flex-col h-screen overflow-hidden", children: [_jsx(TabBar, { activeTab: activeTab, onTabChange: setActiveTab }), activeTab === 'banner' && _jsx(Toolbar, { canvasRef: bannerCanvasRef }), activeTab === 'cover' && _jsx(CoverToolbar, { canvasRef: coverCanvasRef }), _jsxs("div", { className: "flex flex-1 overflow-hidden", children: [_jsx(Sidebar, { files: sidebarFiles, onFilesLoaded: handleFilesLoaded, hasSelectedColumn: sidebarHint, usedUrls: usedUrls, onClearUnused: handleClearUnused, onImageClick: handleImageClick, mode: activeTab, mainImageUrl: coverMainImage?.url ?? null, onSetAsMain: handleSetAsMain, onClearAll: handleClearAll, onRemoveFile: handleRemoveFile, cellLabels: activeTab === 'cover' ? coverCellLabels : undefined }), _jsxs("main", { className: "flex flex-col flex-1 overflow-hidden", children: [_jsxs("div", { className: `flex flex-col flex-1 overflow-hidden ${activeTab !== 'banner' ? 'hidden' : ''}`, children: [_jsx("div", { ref: bannerCanvasAreaRef, className: "flex-1 flex items-center justify-center bg-[#111] overflow-hidden", children: _jsx(BannerCanvas, { ref: bannerCanvasRef, scale: bannerScale, onImagesDropped: (files) => addBannerFiles(files.map((f) => ({ name: f.name, url: f.url }))) }) }), showOverlayPanel && _jsx(OverlayPanel, {}), showFilterPanel && _jsx(FilterPanel, {}), showBrushPanel && _jsx(BrushPanel, {}), _jsxs("div", { className: "border-t border-surface-border bg-surface px-4 py-1.5 flex items-center gap-3", children: [_jsxs("button", { onClick: () => {
                                                     const next = !brushMode;
                                                     setBrushMode(next);
                                                     if (next)

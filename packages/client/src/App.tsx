@@ -11,6 +11,7 @@ import { CoverCanvas, type CoverCanvasHandle } from './components/cover/CoverCan
 import { CoverToolbar } from './components/cover/CoverToolbar';
 import { useBannerStore } from './store/bannerStore';
 import { useCoverStore, coverUid } from './store/coverStore';
+import { computeSelectedFill } from './components/cover/FillLayout';
 import { useOverlayStore } from './store/overlayStore';
 
 export default function App() {
@@ -27,6 +28,9 @@ export default function App() {
   const coverCanvasSize = useCoverStore((s) => s.canvasSize);
   const coverMainImage = useCoverStore((s) => s.mainImage);
   const coverFillPool = useCoverStore((s) => s.fillPool);
+  const coverFillCount = useCoverStore((s) => s.fillCount);
+  const coverFillSeed = useCoverStore((s) => s.fillSeed);
+  const coverCellAssignments = useCoverStore((s) => s.cellAssignments);
   const coverCanvasAreaRef = useRef<HTMLDivElement>(null);
   const coverCanvasRef = useRef<CoverCanvasHandle>(null);
   const [coverScale, setCoverScale] = useState(1);
@@ -119,6 +123,19 @@ export default function App() {
 
   const usedUrls = activeTab === 'banner' ? bannerUsedUrls : coverUsedUrls;
 
+  // Map sidebar image url → cell label for cover mode indicators
+  const coverCellLabels = useMemo(() => {
+    const labels = new Map<string, string>();
+    if (!coverMainImage) return labels;
+    labels.set(coverMainImage.url, 'MAIN');
+    const selected = computeSelectedFill(coverFillPool, coverFillCount, coverFillSeed, coverCellAssignments);
+    for (let i = 0; i < selected.length; i++) {
+      const img = selected[i];
+      if (img) labels.set(img.url, String(i + 1));
+    }
+    return labels;
+  }, [coverMainImage, coverFillPool, coverFillCount, coverFillSeed, coverCellAssignments]);
+
   function handleClearUnused() {
     setSidebarFiles((prev) => {
       const unused = prev.filter((f) => !usedUrls.has(f.url));
@@ -196,10 +213,26 @@ export default function App() {
       } else {
         const store = useCoverStore.getState();
         const coverImage = await loadAsCoverImage(file);
-        if (!store.mainImage) {
+        const sel = store.selectedCellId;
+
+        if (sel === 'main') {
+          // Replace main image, move old main to pool
+          const oldMain = store.mainImage;
+          const existing = store.fillPool.find((f) => f.url === file.url);
+          if (existing) store.removeFromFillPool(existing.id);
           store.setMainImage(coverImage);
-        } else {
+          if (oldMain) store.addToFillPool([oldMain]);
+        } else if (typeof sel === 'number') {
+          // Place image into the selected fill slot
           store.addToFillPool([coverImage]);
+          store.assignCell(sel, coverImage.id);
+        } else {
+          // No selection: default behavior
+          if (!store.mainImage) {
+            store.setMainImage(coverImage);
+          } else {
+            store.addToFillPool([coverImage]);
+          }
         }
       }
     },
@@ -227,9 +260,10 @@ export default function App() {
   const showFilterPanel = !showOverlayPanel && !brushMode && !!selectedColumnId;
   const showBrushPanel = !showOverlayPanel && brushMode;
 
+  const coverSelectedCell = useCoverStore((s) => s.selectedCellId);
   const sidebarHint = activeTab === 'banner'
     ? !!selectedColumnId
-    : !useCoverStore.getState().mainImage;
+    : coverSelectedCell != null || !coverMainImage;
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
@@ -251,6 +285,7 @@ export default function App() {
           onSetAsMain={handleSetAsMain}
           onClearAll={handleClearAll}
           onRemoveFile={handleRemoveFile}
+          cellLabels={activeTab === 'cover' ? coverCellLabels : undefined}
         />
 
         <main className="flex flex-col flex-1 overflow-hidden">

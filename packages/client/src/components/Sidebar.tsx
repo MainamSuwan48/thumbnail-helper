@@ -18,9 +18,10 @@ interface SidebarProps {
   onSetAsMain?: (file: LocalFile) => void;
   onClearAll?: () => void;
   onRemoveFile?: (file: LocalFile) => void;
+  cellLabels?: Map<string, string>;
 }
 
-export function Sidebar({ onFilesLoaded, files, onImageClick, hasSelectedColumn, usedUrls, onClearUnused, mode = 'banner', mainImageUrl, onSetAsMain, onClearAll, onRemoveFile }: SidebarProps) {
+export function Sidebar({ onFilesLoaded, files, onImageClick, hasSelectedColumn, usedUrls, onClearUnused, mode = 'banner', mainImageUrl, onSetAsMain, onClearAll, onRemoveFile, cellLabels }: SidebarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -118,9 +119,14 @@ export function Sidebar({ onFilesLoaded, files, onImageClick, hasSelectedColumn,
               Click an image to place it
             </p>
           )}
-          {mode === 'cover' && (
+          {mode === 'cover' && hasSelectedColumn && (
+            <p className="text-xs text-accent mb-1.5 text-center">
+              Click an image to place it
+            </p>
+          )}
+          {mode === 'cover' && !hasSelectedColumn && (
             <p className="text-xs text-gray-400 mb-1.5 text-center">
-              {!mainImageUrl ? 'Click to set main image' : 'Click to add fill image'}
+              {!mainImageUrl ? 'Click to set main image' : 'Select a cell or click to add'}
             </p>
           )}
           <div className="grid grid-cols-2 gap-1.5 content-start">
@@ -151,12 +157,18 @@ export function Sidebar({ onFilesLoaded, files, onImageClick, hasSelectedColumn,
                     className="w-full aspect-square object-cover select-none pointer-events-none"
                     loading="lazy"
                   />
-                  {isMain && (
-                    <div className="absolute top-0.5 left-0.5 bg-yellow-400 text-black rounded px-1 text-[9px] font-bold leading-tight">
-                      MAIN
+                  {/* Cell label badge for cover mode */}
+                  {mode === 'cover' && cellLabels?.has(file.url) && (
+                    <div className={`absolute top-0.5 left-0.5 rounded px-1 text-[9px] font-bold leading-tight ${
+                      cellLabels.get(file.url) === 'MAIN'
+                        ? 'bg-yellow-400 text-black'
+                        : 'bg-accent text-white'
+                    }`}>
+                      {cellLabels.get(file.url)}
                     </div>
                   )}
-                  {!isMain && usedUrls?.has(file.url) && (
+                  {/* Used dot for banner mode */}
+                  {mode === 'banner' && usedUrls?.has(file.url) && (
                     <div className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-accent group-hover:hidden" />
                   )}
                   {onRemoveFile && (

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, Shuffle, Trash2, User } from 'lucide-react';
+import { Download, RotateCcw, Shuffle, Trash2, User } from 'lucide-react';
 import { useCoverStore } from '../../store/coverStore';
 import type { CoverCanvasHandle } from './CoverCanvas';
 
@@ -20,6 +20,7 @@ export function CoverToolbar({ canvasRef }: { canvasRef: React.RefObject<CoverCa
     setMainImage,
     clearFillPool,
     shuffle,
+    resetDividers,
     artistOverlay,
     updateArtistOverlay,
   } = useCoverStore();
@@ -62,6 +63,8 @@ export function CoverToolbar({ canvasRef }: { canvasRef: React.RefObject<CoverCa
     clearFillPool();
   }
 
+  const maxFill = Math.min(Math.max(fillPool.length, 1), 5);
+
   return (
     <div className="h-10 shrink-0 bg-surface border-b border-surface-border flex items-center gap-3 px-4">
       {/* Canvas size */}
@@ -86,13 +89,13 @@ export function CoverToolbar({ canvasRef }: { canvasRef: React.RefObject<CoverCa
 
       {/* Image count slider */}
       <div className="flex items-center gap-2">
-        <label className="text-xs text-gray-400">Images</label>
+        <label className="text-xs text-gray-400">Cells</label>
         <input
           type="range"
           min={1}
-          max={Math.max(fillPool.length, 1)}
+          max={maxFill}
           step={1}
-          value={Math.min(fillCount, fillPool.length || 1)}
+          value={Math.min(fillCount, maxFill)}
           onChange={(e) => setFillCount(Number(e.target.value))}
           className="w-28 accent-accent"
           disabled={fillPool.length === 0}
@@ -104,10 +107,21 @@ export function CoverToolbar({ canvasRef }: { canvasRef: React.RefObject<CoverCa
 
       <div className="w-px h-4 bg-surface-border" />
 
-      {/* Shuffle */}
+      {/* Reset layout */}
+      <button
+        onClick={resetDividers}
+        disabled={!mainImage}
+        title="Reset layout to default"
+        className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-surface-overlay text-gray-300 hover:bg-surface-border hover:text-gray-100 disabled:opacity-40 transition-colors"
+      >
+        <RotateCcw size={12} />
+        Reset
+      </button>
+
+      {/* Shuffle fill images */}
       <button
         onClick={shuffle}
-        disabled={fillPool.length === 0}
+        disabled={fillPool.length < 2}
         title="Shuffle fill images"
         className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-surface-overlay text-gray-300 hover:bg-surface-border hover:text-gray-100 disabled:opacity-40 transition-colors"
       >

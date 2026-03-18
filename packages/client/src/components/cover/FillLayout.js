@@ -1,4 +1,10 @@
-/** Simple seeded PRNG (mulberry32) */
+// ── Divider-based layout for Cover Maker ────────────────────────────────────
+// Main image occupies one cell, fill images occupy the remaining gap,
+// split by user-draggable dividers.
+export function isVerticalMain(naturalW, naturalH) {
+    return naturalW / naturalH < 1;
+}
+/** Seeded PRNG (mulberry32) */
 function seededRng(seed) {
     let s = seed | 0;
     return () => {
@@ -8,229 +14,132 @@ function seededRng(seed) {
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
 }
-/** Shuffle array using seeded RNG */
-function shuffleArray(arr, rng) {
-    const result = [...arr];
-    for (let i = result.length - 1; i > 0; i--) {
+/**
+ * Compute which fill images go in which cells, respecting:
+ *  - cellAssignments (explicit user picks override shuffle)
+ *  - seeded shuffle for the remaining cells
+ */
+export function computeSelectedFill(pool, fillCount, fillSeed, cellAssignments) {
+    const count = fillCount;
+    const result = new Array(count).fill(null);
+    const usedIds = new Set();
+    // 1. Place explicitly assigned images
+    for (let i = 0; i < count; i++) {
+        const assignedId = cellAssignments[i];
+        if (assignedId) {
+            const img = pool.find((p) => p.id === assignedId);
+            if (img) {
+                result[i] = img;
+                usedIds.add(img.id);
+            }
+        }
+    }
+    // 2. Shuffle remaining pool images for unassigned cells
+    const remaining = pool.filter((p) => !usedIds.has(p.id));
+    const seedInt = Math.floor(fillSeed * 2147483647);
+    const rng = seededRng(seedInt);
+    for (let i = remaining.length - 1; i > 0; i--) {
         const j = Math.floor(rng() * (i + 1));
-        [result[i], result[j]] = [result[j], result[i]];
+        [remaining[i], remaining[j]] = [remaining[j], remaining[i]];
+    }
+    // 3. Fill unassigned cells from shuffled remainder
+    let ri = 0;
+    for (let i = 0; i < count; i++) {
+        if (!result[i] && ri < remaining.length) {
+            result[i] = remaining[ri++];
+        }
     }
     return result;
 }
 /**
- * Compute gap regions left by the main image in a square canvas.
- * Horizontal main → pinned to top, gap below.
- * Vertical main → pinned to right, gap on left.
+ * Auto-compute a reasonable mainDividerPos from image aspect ratio.
+ * Horizontal → fraction of canvas height the main takes.
+ * Vertical   → fraction of canvas width the main takes.
  */
-export function computeGapRegions(canvasSize, mainW, mainH) {
-    const aspect = mainW / mainH;
-    const gaps = [];
+export function autoMainDividerPos(naturalW, naturalH) {
+    const aspect = naturalW / naturalH;
     if (aspect >= 1) {
-        const fitH = canvasSize / aspect;
-        const gapH = canvasSize - fitH;
-        if (gapH > 1) {
-            gaps.push({ x: 0, y: fitH, width: canvasSize, height: gapH });
+        // Horizontal: fit-to-width → height = canvasSize / aspect
+        // Ratio = (canvasSize / aspect) / canvasSize = 1 / aspect
+        return Math.max(0.3, Math.min(0.8, 1 / aspect));
+    }
+    else {
+        // Vertical: fit-to-height → width = canvasSize * aspect
+        // Ratio = (canvasSize * aspect) / canvasSize = aspect
+        return Math.max(0.3, Math.min(0.8, aspect));
+    }
+}
+/**
+ * Generate equal-spaced dividers for N cells → N-1 divider positions.
+ */
+export function equalDividers(count) {
+    if (count <= 1)
+        return [];
+    return Array.from({ length: count - 1 }, (_, i) => (i + 1) / count);
+}
+/**
+ * Compute the main image cell rect.
+ * Horizontal: top portion.  Vertical: right portion.
+ */
+export function computeMainCell(canvasSize, mainDividerPos, vertical) {
+    if (vertical) {
+        const mainW = canvasSize * mainDividerPos;
+        return { x: canvasSize - mainW, y: 0, width: mainW, height: canvasSize };
+    }
+    else {
+        const mainH = canvasSize * mainDividerPos;
+        return { x: 0, y: 0, width: canvasSize, height: mainH };
+    }
+}
+/**
+ * Compute fill cell rects from divider positions.
+ * Horizontal main → fill cells are columns below the main.
+ * Vertical main   → fill cells are rows to the left of the main.
+ */
+export function computeFillCells(canvasSize, mainDividerPos, fillDividers, fillCount, vertical) {
+    const cells = [];
+    if (vertical) {
+        // Fill area is on the left
+        const fillW = canvasSize * (1 - mainDividerPos);
+        const fillH = canvasSize;
+        const fillX = 0;
+        const fillY = 0;
+        // Dividers split vertically (rows)
+        const breaks = [0, ...fillDividers.slice(0, fillCount - 1), 1];
+        for (let i = 0; i < fillCount; i++) {
+            const y0 = breaks[i] * fillH;
+            const y1 = breaks[i + 1] * fillH;
+            cells.push({ x: fillX, y: fillY + y0, width: fillW, height: y1 - y0 });
         }
     }
     else {
-        const fitW = canvasSize * aspect;
-        const gapW = canvasSize - fitW;
-        if (gapW > 1) {
-            gaps.push({ x: 0, y: 0, width: gapW, height: canvasSize });
+        // Fill area is below
+        const fillX = 0;
+        const fillY = canvasSize * mainDividerPos;
+        const fillW = canvasSize;
+        const fillH = canvasSize - fillY;
+        // Dividers split horizontally (columns)
+        const breaks = [0, ...fillDividers.slice(0, fillCount - 1), 1];
+        for (let i = 0; i < fillCount; i++) {
+            const x0 = breaks[i] * fillW;
+            const x1 = breaks[i + 1] * fillW;
+            cells.push({ x: fillX + x0, y: fillY, width: x1 - x0, height: fillH });
         }
     }
-    return gaps;
+    return cells;
 }
 /**
- * Compute main image position and size.
+ * Cover-fit an image into a cell, then apply user pan + zoom.
+ * Returns the image draw rect (may extend beyond cell — caller clips).
  */
-export function computeMainImageRect(canvasSize, mainW, mainH) {
-    const aspect = mainW / mainH;
-    if (aspect >= 1) {
-        const fitH = canvasSize / aspect;
-        return { x: 0, y: 0, width: canvasSize, height: fitH };
-    }
-    else {
-        const fitW = canvasSize * aspect;
-        return { x: canvasSize - fitW, y: 0, width: fitW, height: canvasSize };
-    }
-}
-/**
- * Greedy row packing: split images into rows targeting a given row height.
- * Each row accumulates images until its natural width >= gap width.
- */
-function packRows(images, gapW, targetRowH) {
-    const rows = [];
-    let current = { images: [], aspects: [], totalAspect: 0 };
-    for (const img of images) {
-        const aspect = img.naturalWidth / img.naturalHeight;
-        current.images.push(img);
-        current.aspects.push(aspect);
-        current.totalAspect += aspect;
-        // Row natural width at targetRowH
-        const rowNaturalW = current.totalAspect * targetRowH;
-        if (rowNaturalW >= gapW && current.images.length > 0) {
-            rows.push(current);
-            current = { images: [], aspects: [], totalAspect: 0 };
-        }
-    }
-    // Remaining images go into the last row
-    if (current.images.length > 0) {
-        if (rows.length > 0 && current.images.length === 1) {
-            // Single leftover image: merge into last row for better balance
-            const last = rows[rows.length - 1];
-            last.images.push(...current.images);
-            last.aspects.push(...current.aspects);
-            last.totalAspect += current.totalAspect;
-        }
-        else {
-            rows.push(current);
-        }
-    }
-    return rows;
-}
-/**
- * Same as packRows but for columns (vertical gap).
- */
-function packColumns(images, gapH, targetColW) {
-    const cols = [];
-    let current = { images: [], aspects: [], totalAspect: 0 };
-    for (const img of images) {
-        const invAspect = img.naturalHeight / img.naturalWidth;
-        current.images.push(img);
-        current.aspects.push(invAspect);
-        current.totalAspect += invAspect;
-        const colNaturalH = current.totalAspect * targetColW;
-        if (colNaturalH >= gapH && current.images.length > 0) {
-            cols.push(current);
-            current = { images: [], aspects: [], totalAspect: 0 };
-        }
-    }
-    if (current.images.length > 0) {
-        if (cols.length > 0 && current.images.length === 1) {
-            const last = cols[cols.length - 1];
-            last.images.push(...current.images);
-            last.aspects.push(...current.aspects);
-            last.totalAspect += current.totalAspect;
-        }
-        else {
-            cols.push(current);
-        }
-    }
-    return cols;
-}
-/**
- * Multi-row justified layout for a horizontal gap.
- *
- * 1. Estimate ideal row count from combined aspect ratios
- * 2. Greedy-pack images into rows at target height
- * 3. Justify each row to fill gap width exactly
- * 4. Cover-fit: scale all rows uniformly so total height fills gap
- */
-function layoutHorizontalGap(gap, images) {
-    if (images.length === 0)
-        return [];
-    const aspects = images.map((img) => img.naturalWidth / img.naturalHeight);
-    const totalAspect = aspects.reduce((sum, a) => sum + a, 0);
-    // Ideal row count: balances row height vs density
-    const idealRows = Math.max(1, Math.round(Math.sqrt(totalAspect * gap.height / gap.width)));
-    const targetRowH = gap.height / idealRows;
-    // Pack into rows
-    const rows = packRows(images, gap.width, targetRowH);
-    // Justify each row: compute justified heights
-    const justifiedHeights = rows.map((row) => gap.width / row.totalAspect);
-    const totalJustifiedH = justifiedHeights.reduce((sum, h) => sum + h, 0);
-    // Cover-fit: scale up so rows fill gap height (use max scale for no black space)
-    const scale = Math.max(gap.height / totalJustifiedH, 1);
-    const totalScaledH = totalJustifiedH * scale;
-    // Center vertically (overflow clipped by canvas)
-    const offsetY = gap.y + (gap.height - totalScaledH) / 2;
-    const rects = [];
-    let y = offsetY;
-    for (let r = 0; r < rows.length; r++) {
-        const row = rows[r];
-        const rowH = justifiedHeights[r] * scale;
-        let x = gap.x;
-        for (let i = 0; i < row.images.length; i++) {
-            const w = row.aspects[i] * rowH;
-            rects.push({
-                imageId: row.images[i].id,
-                x,
-                y,
-                width: w,
-                height: rowH,
-            });
-            x += w;
-        }
-        y += rowH;
-    }
-    return rects;
-}
-/**
- * Multi-column justified layout for a vertical gap.
- */
-function layoutVerticalGap(gap, images) {
-    if (images.length === 0)
-        return [];
-    const invAspects = images.map((img) => img.naturalHeight / img.naturalWidth);
-    const totalInvAspect = invAspects.reduce((sum, a) => sum + a, 0);
-    const idealCols = Math.max(1, Math.round(Math.sqrt(totalInvAspect * gap.width / gap.height)));
-    const targetColW = gap.width / idealCols;
-    const cols = packColumns(images, gap.height, targetColW);
-    const justifiedWidths = cols.map((col) => gap.height / col.totalAspect);
-    const totalJustifiedW = justifiedWidths.reduce((sum, w) => sum + w, 0);
-    const scale = Math.max(gap.width / totalJustifiedW, 1);
-    const totalScaledW = totalJustifiedW * scale;
-    const offsetX = gap.x + (gap.width - totalScaledW) / 2;
-    const rects = [];
-    let x = offsetX;
-    for (let c = 0; c < cols.length; c++) {
-        const col = cols[c];
-        const colW = justifiedWidths[c] * scale;
-        let y = gap.y;
-        for (let i = 0; i < col.images.length; i++) {
-            const h = col.aspects[i] * colW;
-            rects.push({
-                imageId: col.images[i].id,
-                x,
-                y,
-                width: colW,
-                height: h,
-            });
-            y += h;
-        }
-        x += colW;
-    }
-    return rects;
-}
-/**
- * Main entry: compute fill layout for all gap regions.
- *
- * fillCount — exact number of images to display (controlled by slider).
- * fillSeed — shuffle seed for randomizing which images are picked.
- */
-export function computeFillLayout(canvasSize, mainImage, fillPool, fillCount, fillSeed) {
-    if (!mainImage || fillPool.length === 0)
-        return [];
-    const gaps = computeGapRegions(canvasSize, mainImage.naturalWidth, mainImage.naturalHeight);
-    if (gaps.length === 0)
-        return [];
-    const isVertical = mainImage.naturalWidth / mainImage.naturalHeight < 1;
-    // Shuffle pool
-    const seedInt = Math.floor(fillSeed * 2147483647);
-    const rng = seededRng(seedInt);
-    const shuffled = shuffleArray(fillPool, rng);
-    // Take exactly fillCount images (clamped to pool size)
-    const count = Math.max(1, Math.min(fillCount, shuffled.length));
-    const selected = shuffled.slice(0, count);
-    const allRects = [];
-    for (const gap of gaps) {
-        if (isVertical) {
-            allRects.push(...layoutVerticalGap(gap, selected));
-        }
-        else {
-            allRects.push(...layoutHorizontalGap(gap, selected));
-        }
-    }
-    return allRects;
+export function computeImageInCell(cell, naturalW, naturalH, panX, panY, zoom) {
+    // Cover-fit: scale so image fully covers cell
+    const baseScale = Math.max(cell.width / naturalW, cell.height / naturalH);
+    const effectiveScale = baseScale * zoom;
+    const imgW = naturalW * effectiveScale;
+    const imgH = naturalH * effectiveScale;
+    // Center in cell, then offset by pan
+    const x = cell.x + (cell.width - imgW) / 2 + panX;
+    const y = cell.y + (cell.height - imgH) / 2 + panY;
+    return { x, y, width: imgW, height: imgH };
 }
