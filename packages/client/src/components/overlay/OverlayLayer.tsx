@@ -306,8 +306,8 @@ function LogoImage({
   useEffect(() => {
     const el = new Image();
     el.onload = () => setHtmlImg(el);
-    el.onerror = () => console.warn("Logo failed to load: /your-logo.png");
-    el.src = "/your-logo.png";
+    el.onerror = () => console.warn("Logo failed to load: /user-assets/your-logo.png");
+    el.src = "/user-assets/your-logo.png";
   }, []);
 
   useEffect(() => {

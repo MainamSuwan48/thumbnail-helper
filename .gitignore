@@ -38,6 +38,10 @@ Thumbs.db
 coverage/
 .nyc_output/
 
+# Personal assets (served from ~/.thumbnail-helper/assets/ at runtime)
+public/artist-name.png
+public/your-logo.png
+
 # Misc
 *.local
 .cache/

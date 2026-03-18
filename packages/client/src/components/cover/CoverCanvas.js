@@ -111,7 +111,7 @@ function DividerHandle({ x, y, width, height, axis, areaStart, areaSize, minPos,
 }
 // ── Artist name overlay ─────────────────────────────────────────────────────
 function ArtistNameOverlay({ canvasSize, x, y, overlayScale, onDragEnd, onScaleChange, }) {
-    const [img] = useImage('/artist-name.png');
+    const [img] = useImage('/user-assets/artist-name.png');
     if (!img)
         return null;
     const w = img.naturalWidth * overlayScale;

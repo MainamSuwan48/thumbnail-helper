@@ -7,7 +7,9 @@
       "Bash(cd E:/Project/thumbnail-helper && pnpm --filter client build 2>&1 | tail -15)",
       "Bash(cd E:/Project/thumbnail-helper && pnpm --filter client build 2>&1 | tail -30)",
       "Bash(cd E:/Project/thumbnail-helper && pnpm --filter client build 2>&1 | tail -10)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(mkdir -p ~/.thumbnail-helper/assets)",
+      "Bash(cp E:/Project/thumbnail-helper/public/artist-name.png E:/Project/thumbnail-helper/public/your-logo.png ~/.thumbnail-helper/assets/)"
     ]
   }
 }

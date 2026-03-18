@@ -332,7 +332,7 @@ function ArtistNameOverlay({
   onDragEnd: (x: number, y: number) => void;
   onScaleChange: (s: number) => void;
 }) {
-  const [img] = useImage('/artist-name.png');
+  const [img] = useImage('/user-assets/artist-name.png');
   if (!img) return null;
 
   const w = img.naturalWidth * overlayScale;
