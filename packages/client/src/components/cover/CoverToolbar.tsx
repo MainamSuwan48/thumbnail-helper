@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Download, RotateCcw, Shuffle, Trash2, User } from 'lucide-react';
 import { useCoverStore } from '../../store/coverStore';
 import type { CoverCanvasHandle } from './CoverCanvas';
+import { Tooltip } from '../Tooltip';
 
 const SIZE_PRESETS = [
   { label: '1080', size: 1080 },
@@ -66,30 +67,30 @@ export function CoverToolbar({ canvasRef }: { canvasRef: React.RefObject<CoverCa
   const maxFill = Math.min(Math.max(fillPool.length, 1), 5);
 
   return (
-    <div className="h-10 shrink-0 bg-surface border-b border-surface-border flex items-center gap-3 px-4">
+    <div className="h-11 shrink-0 bg-surface-raised border-b border-surface-border flex items-center gap-3 px-4">
       {/* Canvas size */}
-      <div className="flex items-center gap-1.5">
-        <span className="text-xs text-gray-400">Size</span>
+      <div className="flex items-center gap-1">
         {SIZE_PRESETS.map((p) => (
-          <button
-            key={p.size}
-            onClick={() => setCanvasSize(p.size)}
-            className={`px-2 py-0.5 rounded text-xs transition-colors ${
-              canvasSize === p.size
-                ? 'bg-accent text-white'
-                : 'bg-surface-overlay text-gray-300 hover:bg-surface-border'
-            }`}
-          >
-            {p.label}
-          </button>
+          <Tooltip key={p.size} label={`${p.size}×${p.size} canvas`}>
+            <button
+              onClick={() => setCanvasSize(p.size)}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                canvasSize === p.size
+                  ? 'bg-accent text-white'
+                  : 'bg-surface-overlay text-gray-400 hover:bg-surface-border hover:text-gray-200'
+              }`}
+            >
+              {p.label}
+            </button>
+          </Tooltip>
         ))}
       </div>
 
-      <div className="w-px h-4 bg-surface-border" />
+      <div className="w-px h-5 bg-surface-border" />
 
       {/* Image count slider */}
       <div className="flex items-center gap-2">
-        <label className="text-xs text-gray-400">Cells</label>
+        <span className="text-xs text-gray-500">Cells</span>
         <input
           type="range"
           min={1}
@@ -97,86 +98,83 @@ export function CoverToolbar({ canvasRef }: { canvasRef: React.RefObject<CoverCa
           step={1}
           value={Math.min(fillCount, maxFill)}
           onChange={(e) => setFillCount(Number(e.target.value))}
-          className="w-28 accent-accent"
+          className="w-24 accent-accent"
           disabled={fillPool.length === 0}
         />
-        <span className="text-xs text-gray-300 w-5">
+        <span className="text-xs text-gray-400 w-5">
           {fillPool.length === 0 ? 0 : Math.min(fillCount, fillPool.length)}
         </span>
       </div>
 
-      <div className="w-px h-4 bg-surface-border" />
+      <div className="w-px h-5 bg-surface-border" />
 
       {/* Reset layout */}
-      <button
-        onClick={resetDividers}
-        disabled={!mainImage}
-        title="Reset layout to default"
-        className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-surface-overlay text-gray-300 hover:bg-surface-border hover:text-gray-100 disabled:opacity-40 transition-colors"
-      >
-        <RotateCcw size={12} />
-        Reset
-      </button>
+      <Tooltip label="Reset layout">
+        <button
+          onClick={resetDividers}
+          disabled={!mainImage}
+          className="w-7 h-7 rounded-md flex items-center justify-center text-gray-400 hover:text-gray-200 bg-surface-overlay hover:bg-surface-border disabled:opacity-40 transition-colors"
+        >
+          <RotateCcw size={13} />
+        </button>
+      </Tooltip>
 
-      {/* Shuffle fill images */}
-      <button
-        onClick={shuffle}
-        disabled={fillPool.length < 2}
-        title="Shuffle fill images"
-        className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-surface-overlay text-gray-300 hover:bg-surface-border hover:text-gray-100 disabled:opacity-40 transition-colors"
-      >
-        <Shuffle size={12} />
-        Shuffle
-      </button>
+      {/* Shuffle */}
+      <Tooltip label="Shuffle fill images">
+        <button
+          onClick={shuffle}
+          disabled={fillPool.length < 2}
+          className="w-7 h-7 rounded-md flex items-center justify-center text-gray-400 hover:text-gray-200 bg-surface-overlay hover:bg-surface-border disabled:opacity-40 transition-colors"
+        >
+          <Shuffle size={13} />
+        </button>
+      </Tooltip>
 
       {/* Artist name toggle */}
-      <button
-        onClick={() => updateArtistOverlay({ visible: !artistOverlay.visible })}
-        title="Toggle artist name overlay"
-        className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
-          artistOverlay.visible
-            ? 'bg-accent text-white'
-            : 'bg-surface-overlay text-gray-300 hover:bg-surface-border'
-        }`}
-      >
-        <User size={12} />
-        Artist
-      </button>
+      <Tooltip label="Artist name overlay">
+        <button
+          onClick={() => updateArtistOverlay({ visible: !artistOverlay.visible })}
+          className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors ${
+            artistOverlay.visible
+              ? 'bg-accent text-white'
+              : 'bg-surface-overlay text-gray-400 hover:bg-surface-border hover:text-gray-200'
+          }`}
+        >
+          <User size={13} />
+        </button>
+      </Tooltip>
 
       {/* Clear */}
       {(mainImage || fillPool.length > 0) && (
-        <button
-          onClick={handleClear}
-          title="Clear all cover images"
-          className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-surface-overlay text-gray-400 hover:text-red-400 hover:bg-surface-border transition-colors"
-        >
-          <Trash2 size={12} />
-          Clear
-        </button>
+        <Tooltip label="Clear all cover images">
+          <button
+            onClick={handleClear}
+            className="w-7 h-7 rounded-md flex items-center justify-center text-gray-500 hover:text-red-400 bg-surface-overlay hover:bg-surface-border transition-colors"
+          >
+            <Trash2 size={13} />
+          </button>
+        </Tooltip>
       )}
 
       <div className="flex-1" />
 
-      {/* Fill pool count */}
-      <span className="text-xs text-gray-500">
+      <span className="text-xs text-gray-600">
         {fillPool.length} fill image{fillPool.length !== 1 ? 's' : ''}
       </span>
 
-      {/* Export status */}
       {exportMsg && (
         <span className="text-xs text-green-400 max-w-xs truncate" title={exportMsg}>
           {exportMsg}
         </span>
       )}
 
-      {/* Export */}
       <button
         onClick={handleExport}
         disabled={exporting}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-accent hover:bg-accent-hover disabled:opacity-50 text-white text-xs font-medium transition-colors"
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-accent hover:bg-accent-hover disabled:opacity-50 text-white text-xs font-medium transition-colors"
       >
         <Download size={13} />
-        {exporting ? 'Exporting…' : 'Export PNG'}
+        {exporting ? 'Exporting…' : 'Export'}
       </button>
     </div>
   );

@@ -1,4 +1,4 @@
-import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
+import { jsx as _jsx, Fragment as _Fragment, jsxs as _jsxs } from "react/jsx-runtime";
 import { useRef, useEffect, useState } from "react";
 import { Layer, Group, Text, Line, Image as KonvaImage, Transformer, } from "react-konva";
 import Konva from "konva";
@@ -7,7 +7,7 @@ import { useOverlayStore } from "../../store/overlayStore";
 import { useBannerStore } from "../../store/bannerStore";
 import { OVERLAY_FONT } from "../../utils/font";
 import { createOutlinedCanvas } from "../../utils/mascotOutline";
-import { IMAGES_LETTERS } from "../BannerCanvas";
+import { IMAGES_LETTERS, EXTRAS_LETTERS } from "../BannerCanvas";
 // ── Blinking selection border (reusable) ─────────────────────────────────────
 function BlinkingBorder({ x, y, width, height, }) {
     const lineRef = useRef(null);
@@ -32,10 +32,18 @@ function TextGroup({ canvasHeight }) {
     const { picCount, selectedOverlayId, setSelectedOverlay } = useOverlayStore();
     const brushMode = useBannerStore((s) => s.brushMode);
     const [imagesCanvas, setImagesCanvas] = useState(null);
+    const [extrasCanvas, setExtrasCanvas] = useState(null);
     const imagesRef = useRef(null);
     useEffect(() => {
         document.fonts.ready.then(() => setImagesCanvas(buildImagesCanvas(picCount.fontSize)));
     }, [picCount.fontSize]);
+    useEffect(() => {
+        if (!picCount.extrasEnabled) {
+            setExtrasCanvas(null);
+            return;
+        }
+        document.fonts.ready.then(() => setExtrasCanvas(buildExtrasCanvas(picCount.fontSize, picCount.extrasColor)));
+    }, [picCount.fontSize, picCount.extrasColor, picCount.extrasEnabled]);
     // Keep "Images" node above picCount text
     useEffect(() => {
         if (imagesRef.current) {
@@ -61,15 +69,28 @@ function TextGroup({ canvasHeight }) {
     const imgY = imagesCanvas
         ? picCount.fontSize - imagesCanvas.height + 35
         : 0;
+    // Extras layout (after "Images")
+    const imgsW = imagesCanvas?.width ?? 0;
+    const plusX = imgX + imgsW + 15;
+    const plusFontSize = Math.round(picCount.fontSize * 0.7);
+    const extrasCountX = plusX + plusFontSize * 0.45 + 8;
+    const extrasCountW = picCount.extras.length * picCount.fontSize * 0.6;
+    const extrasImgX = extrasCountX + extrasCountW + 10;
+    const extrasImgY = extrasCanvas
+        ? picCount.fontSize - extrasCanvas.height + 35
+        : 0;
     // Bounding box for selection border (approximate)
-    const totalW = countTextW + (imagesCanvas ? imagesCanvas.width + 10 : 0) + 8;
+    const extrasW = picCount.extrasEnabled
+        ? plusFontSize * 0.45 + 8 + extrasCountW + (extrasCanvas ? extrasCanvas.width + 10 : 0) + imgsW + 15
+        : 0;
+    const totalW = countTextW + (imagesCanvas ? imagesCanvas.width + 10 : 0) + extrasW + 8;
     const totalH = picCount.fontSize + 8;
     return (_jsxs(Group, { x: picCount.x, y: groupY, opacity: picCount.opacity, rotation: -8, scaleX: picCount.scale, scaleY: picCount.scale, onClick: () => {
             if (brushMode || selectedOverlayId === "mascot")
                 return;
             setSelectedOverlay("picCount");
             useBannerStore.getState().setSelectedColumn(null);
-        }, children: [_jsx(Text, { text: picCount.count, fontFamily: OVERLAY_FONT, fontStyle: "bold", fontSize: picCount.fontSize, fill: picCount.color, stroke: picCount.strokeEnabled ? picCount.strokeColor : undefined, strokeWidth: picCount.strokeEnabled ? picCount.strokeWidth : undefined, fillAfterStrokeEnabled: picCount.strokeEnabled, ...shadow }), imagesCanvas && (_jsx(KonvaImage, { ref: imagesRef, image: imagesCanvas, x: imgX, y: imgY, width: imagesCanvas.width, height: imagesCanvas.height, rotation: -5, listening: false })), isSelected && (_jsx(BlinkingBorder, { x: -4, y: -4, width: totalW, height: totalH }))] }));
+        }, children: [_jsx(Text, { text: picCount.count, fontFamily: OVERLAY_FONT, fontStyle: "bold", fontSize: picCount.fontSize, fill: picCount.color, stroke: picCount.strokeEnabled ? picCount.strokeColor : undefined, strokeWidth: picCount.strokeEnabled ? picCount.strokeWidth : undefined, fillAfterStrokeEnabled: picCount.strokeEnabled, ...shadow }), imagesCanvas && (_jsx(KonvaImage, { ref: imagesRef, image: imagesCanvas, x: imgX, y: imgY, width: imagesCanvas.width, height: imagesCanvas.height, rotation: -5, listening: false })), picCount.extrasEnabled && (_jsxs(_Fragment, { children: [_jsx(Text, { text: "+", fontFamily: OVERLAY_FONT, fontStyle: "bold", fontSize: plusFontSize, fill: "#ffffff", stroke: "#ffffff", strokeWidth: picCount.strokeEnabled ? Math.max(2, picCount.strokeWidth * 0.5) : 2, fillAfterStrokeEnabled: true, x: plusX, y: picCount.fontSize - plusFontSize + 4, listening: false }), _jsx(Text, { text: picCount.extras, fontFamily: OVERLAY_FONT, fontStyle: "bold", fontSize: picCount.fontSize, fill: picCount.extrasColor, stroke: picCount.strokeEnabled ? picCount.strokeColor : undefined, strokeWidth: picCount.strokeEnabled ? picCount.strokeWidth : undefined, fillAfterStrokeEnabled: picCount.strokeEnabled, x: extrasCountX, ...shadow, listening: false }), extrasCanvas && (_jsx(KonvaImage, { image: extrasCanvas, x: extrasImgX, y: extrasImgY, width: extrasCanvas.width, height: extrasCanvas.height, rotation: -5, listening: false }))] })), isSelected && (_jsx(BlinkingBorder, { x: -4, y: -4, width: totalW, height: totalH }))] }));
 }
 // ── Mascot (draggable, scroll to resize, Delete key to clear) ─────────────────
 function MascotNode() {
@@ -239,6 +260,45 @@ function buildImagesCanvas(countFontSize) {
         ctx.strokeStyle = "#ffffff";
         ctx.strokeText(char, -charMetrics[i].w / 2, -fontSize / 2);
         ctx.fillStyle = "#a8d8f0";
+        ctx.fillText(char, -charMetrics[i].w / 2, -fontSize / 2);
+        ctx.restore();
+        cursorX += charMetrics[i].w + gap;
+    }
+    return canvas;
+}
+function buildExtrasCanvas(countFontSize, color) {
+    const fontSize = Math.round(countFontSize * IMAGES_RATIO);
+    const stroke = Math.max(2, Math.round(fontSize * STROKE_RATIO));
+    const font = `bold ${fontSize}px ${OVERLAY_FONT}`;
+    const measure = document.createElement("canvas").getContext("2d");
+    measure.font = font;
+    const gap = 2;
+    const charMetrics = EXTRAS_LETTERS.map(({ char, tx }) => ({
+        w: measure.measureText(char).width,
+        tx,
+    }));
+    const totalW = charMetrics.reduce((s, m) => s + m.w + gap, 0) + stroke * 2 + 20;
+    const totalH = fontSize + stroke * 2 + 20;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.ceil(totalW);
+    canvas.height = Math.ceil(totalH);
+    const ctx = canvas.getContext("2d");
+    ctx.font = font;
+    ctx.textBaseline = "top";
+    let cursorX = stroke + 5;
+    for (let i = 0; i < EXTRAS_LETTERS.length; i++) {
+        const { char, rotate, tx, ty } = EXTRAS_LETTERS[i];
+        const s = fontSize / 42;
+        const cx = cursorX + charMetrics[i].w / 2 + tx * s;
+        const cy = stroke + 5 + fontSize / 2 + ty * s;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate((rotate * Math.PI) / 180);
+        ctx.lineWidth = stroke;
+        ctx.lineJoin = "round";
+        ctx.strokeStyle = "#ffffff";
+        ctx.strokeText(char, -charMetrics[i].w / 2, -fontSize / 2);
+        ctx.fillStyle = color;
         ctx.fillText(char, -charMetrics[i].w / 2, -fontSize / 2);
         ctx.restore();
         cursorX += charMetrics[i].w + gap;

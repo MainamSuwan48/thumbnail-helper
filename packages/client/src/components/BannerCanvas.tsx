@@ -230,6 +230,20 @@ export const IMAGES_LETTERS: {
   { char: "s", rotate: 7, tx: 1, ty: 3 },
 ];
 
+export const EXTRAS_LETTERS: {
+  char: string;
+  rotate: number;
+  tx: number;
+  ty: number;
+}[] = [
+  { char: "E", rotate: -8, tx: 0, ty: -4 },
+  { char: "x", rotate: 5, tx: 1, ty: 3 },
+  { char: "t", rotate: -4, tx: 0, ty: -5 },
+  { char: "r", rotate: 7, tx: 1, ty: 4 },
+  { char: "a", rotate: -6, tx: 0, ty: -3 },
+  { char: "s", rotate: 8, tx: 1, ty: 5 },
+];
+
 // ── Drop zone ─────────────────────────────────────────────────────────────────
 
 function DropZonePlaceholder({
@@ -680,29 +694,6 @@ export const BannerCanvas = forwardRef<BannerCanvasHandle, { scale: number; onIm
         // Skip if user is typing in an input/textarea
         const tag = (e.target as HTMLElement)?.tagName;
         if (tag === "INPUT" || tag === "TEXTAREA") return;
-
-        // B → toggle brush mode
-        if (e.key === "b" && !e.ctrlKey && !e.metaKey) {
-          e.preventDefault();
-          const s = useBannerStore.getState();
-          const next = !s.brushMode;
-          s.setBrushMode(next);
-          if (next) useOverlayStore.getState().setSelectedOverlay(null);
-          return;
-        }
-
-        // M → toggle mascot overlay
-        if (e.key === "m" && !e.ctrlKey && !e.metaKey) {
-          e.preventDefault();
-          const o = useOverlayStore.getState();
-          const newId = o.selectedOverlayId === "mascot" ? null : "mascot";
-          o.setSelectedOverlay(newId);
-          if (newId) {
-            useBannerStore.getState().setSelectedColumn(null);
-            useBannerStore.getState().setBrushMode(false);
-          }
-          return;
-        }
 
         if (!useBannerStore.getState().brushMode) return;
         if (e.key === "z" && (e.ctrlKey || e.metaKey) && !e.shiftKey) {

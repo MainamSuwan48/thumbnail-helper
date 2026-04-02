@@ -1,5 +1,6 @@
 import { useRef, useState, useCallback } from 'react';
-import { FolderOpen, ImagePlus, Trash2, Star, X } from 'lucide-react';
+import { ImagePlus, Trash2, Star, X, ImageOff } from 'lucide-react';
+import { Tooltip } from './Tooltip';
 
 export interface LocalFile {
   name: string;
@@ -54,37 +55,39 @@ export function Sidebar({ onFilesLoaded, files, onImageClick, hasSelectedColumn,
   return (
     <aside className="w-56 shrink-0 bg-surface-raised border-r border-surface-border flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="px-3 py-2 border-b border-surface-border">
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
+      <div className="px-3 py-2.5 border-b border-surface-border">
+        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-2">
           Images
         </p>
 
         <div className="flex gap-1.5">
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded bg-surface border border-surface-border text-gray-400 hover:text-gray-200 hover:border-accent text-xs transition-colors"
+            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md bg-surface border border-surface-border text-gray-400 hover:text-gray-200 hover:border-accent text-xs transition-colors"
           >
-            <ImagePlus size={13} />
+            <ImagePlus size={12} />
             Add images
           </button>
           {files.length > 0 && onClearUnused && (
-            <button
-              onClick={onClearUnused}
-              title="Clear unused images"
-              className="flex items-center justify-center px-2 py-1.5 rounded bg-surface border border-surface-border text-gray-400 hover:text-red-400 hover:border-red-400 text-xs transition-colors"
-            >
-              <Trash2 size={13} />
-            </button>
+            <Tooltip label="Clear unused">
+              <button
+                onClick={onClearUnused}
+                className="flex items-center justify-center px-2 py-1.5 rounded-md bg-surface border border-surface-border text-gray-500 hover:text-red-400 hover:border-red-400/50 text-xs transition-colors"
+              >
+                <Trash2 size={12} />
+              </button>
+            </Tooltip>
           )}
           {files.length > 0 && onClearAll && (
-            <button
-              onClick={onClearAll}
-              title="Clear all images"
-              className="flex items-center justify-center gap-1 px-2 py-1.5 rounded bg-surface border border-surface-border text-gray-400 hover:text-red-400 hover:border-red-400 text-xs transition-colors"
-            >
-              <Trash2 size={13} />
-              All
-            </button>
+            <Tooltip label="Clear all">
+              <button
+                onClick={onClearAll}
+                className="flex items-center justify-center gap-1 px-2 py-1.5 rounded-md bg-surface border border-surface-border text-gray-500 hover:text-red-400 hover:border-red-400/50 text-xs transition-colors"
+              >
+                <Trash2 size={12} />
+                <span>All</span>
+              </button>
+            </Tooltip>
           )}
         </div>
 
@@ -107,25 +110,20 @@ export function Sidebar({ onFilesLoaded, files, onImageClick, hasSelectedColumn,
       >
         {files.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center gap-2 text-gray-600 select-none">
-            <FolderOpen size={28} />
+            <ImageOff size={26} strokeWidth={1.5} />
             <p className="text-xs leading-relaxed">
               Add images or drop<br />files here
             </p>
           </div>
         ) : (
           <>
-          {mode === 'banner' && hasSelectedColumn && (
-            <p className="text-xs text-accent mb-1.5 text-center">
-              Click an image to place it
-            </p>
-          )}
-          {mode === 'cover' && hasSelectedColumn && (
+          {(mode === 'banner' || mode === 'cover') && hasSelectedColumn && (
             <p className="text-xs text-accent mb-1.5 text-center">
               Click an image to place it
             </p>
           )}
           {mode === 'cover' && !hasSelectedColumn && (
-            <p className="text-xs text-gray-400 mb-1.5 text-center">
+            <p className="text-xs text-gray-500 mb-1.5 text-center">
               {!mainImageUrl ? 'Click to set main image' : 'Select a cell or click to add'}
             </p>
           )}
@@ -138,16 +136,16 @@ export function Sidebar({ onFilesLoaded, files, onImageClick, hasSelectedColumn,
                   draggable={mode === 'banner'}
                   onDragStart={mode === 'banner' ? (e) => handleDragStart(e, file) : undefined}
                   onClick={() => onImageClick?.(file)}
-                  className={`group relative rounded overflow-hidden border transition-colors cursor-pointer ${
+                  className={`group relative rounded-md overflow-hidden border transition-colors cursor-pointer ${
                     isMain
                       ? 'border-yellow-400 ring-2 ring-yellow-400/50'
                       : usedUrls?.has(file.url)
-                        ? 'border-accent/60 ring-1 ring-accent/40'
+                        ? 'border-accent/60 ring-1 ring-accent/30'
                         : 'border-surface-border'
                   } ${
                     mode === 'banner' && !hasSelectedColumn
-                      ? 'cursor-grab active:cursor-grabbing hover:border-accent'
-                      : 'hover:border-accent hover:ring-1 hover:ring-accent'
+                      ? 'cursor-grab active:cursor-grabbing hover:border-accent/60'
+                      : 'hover:border-accent/60 hover:ring-1 hover:ring-accent/20'
                   }`}
                   title={file.name}
                 >
@@ -157,7 +155,6 @@ export function Sidebar({ onFilesLoaded, files, onImageClick, hasSelectedColumn,
                     className="w-full aspect-square object-cover select-none pointer-events-none"
                     loading="lazy"
                   />
-                  {/* Cell label badge for cover mode */}
                   {mode === 'cover' && cellLabels?.has(file.url) && (
                     <div className={`absolute top-0.5 left-0.5 rounded px-1 text-[9px] font-bold leading-tight ${
                       cellLabels.get(file.url) === 'MAIN'
@@ -167,7 +164,6 @@ export function Sidebar({ onFilesLoaded, files, onImageClick, hasSelectedColumn,
                       {cellLabels.get(file.url)}
                     </div>
                   )}
-                  {/* Used dot for banner mode */}
                   {mode === 'banner' && usedUrls?.has(file.url) && (
                     <div className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-accent group-hover:hidden" />
                   )}

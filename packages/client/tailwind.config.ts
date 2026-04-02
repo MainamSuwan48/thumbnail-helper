@@ -6,14 +6,14 @@ export default {
     extend: {
       colors: {
         surface: {
-          DEFAULT: '#1a1a1a',
-          raised: '#242424',
-          overlay: '#2e2e2e',
-          border: '#3a3a3a',
+          DEFAULT: '#161618',
+          raised: '#202024',
+          overlay: '#2a2a2e',
+          border: '#38383f',
         },
         accent: {
-          DEFAULT: '#7c3aed',
-          hover: '#6d28d9',
+          DEFAULT: '#e8547a',
+          hover: '#d4436a',
         },
       },
     },

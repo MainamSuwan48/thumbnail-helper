@@ -16,6 +16,9 @@ export interface PicCountState {
   strokeEnabled: boolean;
   strokeColor: string;
   strokeWidth: number;
+  extrasEnabled: boolean;
+  extras: string;
+  extrasColor: string;
 }
 
 export interface MascotState {
@@ -65,6 +68,9 @@ export const useOverlayStore = create<OverlayStore>()(
         strokeEnabled: true,
         strokeColor: "#ffffff",
         strokeWidth: 16,
+        extrasEnabled: false,
+        extras: "3",
+        extrasColor: "#ffe07a",
       },
       mascot: {
         visible: false,

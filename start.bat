@@ -8,7 +8,7 @@ echo ========================================
 echo.
 
 echo [1/2] Building project...
-call pnpm build
+call bun run build
 if %errorlevel% neq 0 (
     echo.
     echo BUILD FAILED! Check the errors above.
@@ -23,6 +23,6 @@ echo Opening http://localhost:3000 in your browser...
 start "" http://localhost:3000
 
 set NODE_ENV=production
-call pnpm start
+call bun run start
 
 pause

@@ -82,6 +82,26 @@ export function OverlayPanel() {
               <Slider label="Stroke W" min={1} max={20} value={picCount.strokeWidth} onChange={(v) => updatePicCount({ strokeWidth: v })} />
             </>
           )}
+          <label className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer">
+            <input type="checkbox" checked={picCount.extrasEnabled} onChange={(e) => updatePicCount({ extrasEnabled: e.target.checked })} />
+            Extras
+          </label>
+          {picCount.extrasEnabled && (
+            <>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-400">Extras</label>
+                <input
+                  className="w-20 bg-surface border border-surface-border rounded px-2 py-0.5 text-xs text-gray-200 focus:outline-none focus:border-accent"
+                  value={picCount.extras}
+                  onChange={(e) => updatePicCount({ extras: e.target.value })}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-400">Extras Color</label>
+                <ColorInput value={picCount.extrasColor} onChange={(v) => updatePicCount({ extrasColor: v })} />
+              </div>
+            </>
+          )}
         </>
       )}
 

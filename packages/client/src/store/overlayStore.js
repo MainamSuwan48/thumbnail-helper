@@ -15,6 +15,9 @@ export const useOverlayStore = create()(persist((set) => ({
         strokeEnabled: true,
         strokeColor: "#ffffff",
         strokeWidth: 16,
+        extrasEnabled: false,
+        extras: "3",
+        extrasColor: "#ffe07a",
     },
     mascot: {
         visible: false,

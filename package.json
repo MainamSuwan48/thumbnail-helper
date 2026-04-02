@@ -1,19 +1,15 @@
 {
   "name": "thumbnail-helper",
   "private": true,
+  "workspaces": ["packages/*"],
   "scripts": {
-    "dev": "concurrently \"pnpm --filter server dev\" \"pnpm --filter client dev\"",
-    "build": "pnpm --filter server build && pnpm --filter client build",
-    "start": "pnpm --filter server start"
+    "dev": "concurrently \"bun run --filter server dev\" \"bun run --filter client dev\"",
+    "build": "bun run --filter server build && bun run --filter client build",
+    "start": "bun run --filter server start"
   },
   "devDependencies": {
     "concurrently": "^9.0.0",
     "typescript": "^5.7.0"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "sharp"
-    ]
-  }
+  "trustedDependencies": ["esbuild", "sharp"]
 }
